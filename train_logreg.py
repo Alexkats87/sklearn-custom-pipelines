@@ -16,6 +16,7 @@ from transformers.const import *
 logging.basicConfig(format='%(asctime)s - %(levelname)s - %(message)s', level=logging.INFO)
 
 
+# Place you data source name here
 FILE_DATA = "..."
 
 

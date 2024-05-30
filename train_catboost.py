@@ -15,7 +15,7 @@ from transformers.const import *
 
 logging.basicConfig(format='%(asctime)s - %(levelname)s - %(message)s', level=logging.INFO)
 
-
+# Place you data source name here
 FILE_DATA = "..."
 
 
@@ -27,7 +27,7 @@ if __name__ == "__main__":
     y = df[TARGET]
     X = df.drop(TARGET, axis=1)
 
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=0)
     
     # Features and how to fill missings
     num_features_missings = {
@@ -52,11 +52,19 @@ if __name__ == "__main__":
         ("feature_elimination_tr", FeatureEliminationTransformer()),
         ("decorr_tr", DecorrelationTransformer(features_pattern=fr"^{NUM}.*")),
         ("rare_encoder_tr", RareCategoriesTransformer()),
+        ("feature_elimination_tr", FeatureEliminationTransformer()),
         ("model_tr", CustomCatBoostClassifier()),
     ])
     
-    # Fit pipeline
-    model_ppl.fit(X_train, y_train)
+    # Fit pipeline with evaluation set to implement early stopping
+    model_ppl.fit(
+        X=X_train, 
+        y=y_train, 
+        model_tr__eval_set=(
+            X_train.sample(frac=0.1, random_state=0),
+            y_train.sample(frac=0.1, random_state=0)
+        )
+    )
     
     # Make prediction
     y_train_pred = model_ppl.predict(X_train)

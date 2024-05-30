@@ -6,3 +6,4 @@ scipy==1.5.3
 feature-engine==1.2.0
 statsmodels==0.13.5
 optbinning==0.11.0
+catboost==1.2.5

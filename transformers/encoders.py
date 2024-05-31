@@ -71,8 +71,9 @@ class WoeEncoderTransformer(BaseEstimator, TransformerMixin):
         X = self._to_str(X)
         
         if not self.fitting:
-        
-            features_with_missings = (X[X!='nan'])[self.features_lst].isnull().sum()
+            
+            X_tmp = X[self.features_lst].copy()
+            features_with_missings = (X_tmp[X_tmp!='nan']).isnull().sum()
             features_with_missings = features_with_missings[features_with_missings > 0]
             
             for f in features_with_missings.index:

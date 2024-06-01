@@ -18,3 +18,13 @@ My collection of custom-made transformers based on [Scikit-Learn pipelines](http
 
 
 **2. ENCODERS**
+
+- **WoeEncoderTransformer** - transforms categirical features into ***weight of evidence (WOE)***  values (see detailed explonation [here](https://www.analyticsvidhya.com/blog/2021/06/understand-weight-of-evidence-and-information-value/)). Based on [Feature-engine](https://feature-engine.trainindata.com/en/latest/) lib
+
+- **RareCategoriesTransformer** - encodes rare values of categorical features into one value `Others` to reduce features cardinality. Based on [Feature-engine](https://feature-engine.trainindata.com/en/latest/) lib
+
+- **BinningCategoriesTransformer** - applies categories grouping for categorical features into bigger groups with similar WOE values to reduce cardinality. Based on [optbinning](https://github.com/guillermo-navas-palencia/optbinning) lib.
+
+- **BinningNumericalTransformer** - applies discretisation for numerical features. Based on [optbinning](https://github.com/guillermo-navas-palencia/optbinning) lib.
+
+- 

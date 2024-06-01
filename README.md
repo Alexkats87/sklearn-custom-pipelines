@@ -15,8 +15,6 @@ My collection of custom-made transformers based on [Scikit-Learn pipelines](http
 
 
 
-
-
 **2. ENCODERS**
 
 - **WoeEncoderTransformer** - transforms categirical features into ***weight of evidence (WOE)***  values (see detailed explonation [here](https://www.analyticsvidhya.com/blog/2021/06/understand-weight-of-evidence-and-information-value/)). Based on [Feature-engine](https://feature-engine.trainindata.com/en/latest/) lib
@@ -27,4 +25,9 @@ My collection of custom-made transformers based on [Scikit-Learn pipelines](http
 
 - **BinningNumericalTransformer** - applies discretisation for numerical features. Based on [optbinning](https://github.com/guillermo-navas-palencia/optbinning) lib.
 
-- 
+
+**3. MODELING**
+
+- **CustomLogisticRegressionClassifier** - fits Logistic Regression model (from [statsmodels](https://www.statsmodels.org/stable/index.html)), performs iterative feature selection excluding features with high p-values after every model fit
+
+- **CustomCatBoostClassifier** - fits CatBoostClassifier model, performs iterative feature selection excluding features with low feature importance after every model fit. Uses evaluation set for early stopping.

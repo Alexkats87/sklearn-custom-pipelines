@@ -81,7 +81,7 @@ class WoeEncoderTransformer(BaseEstimator, TransformerMixin):
                 
         self.fitting = False
         
-        X_orig = X[self.features_lst].copy()
+        X_orig = X.copy()
         
         X = self.woe_encoder.transform(X[self.features_lst])
         X = X.rename(

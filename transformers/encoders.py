@@ -198,7 +198,10 @@ class BinningCategoriesTransformer(BaseEstimator, TransformerMixin):
             bins_map_dct = get_optbin_info_cat(
                 data=pd.concat([X, y], axis=1), 
                 feature=f, 
-                target=TARGET
+                target=TARGET,
+                max_n_bins = self.max_n_bins,
+                min_bin_size = self.min_bin_size,
+                min_target_diff = self.min_target_diff
             )
      
             self.binning_results_dct[f] = bins_map_dct
@@ -253,7 +256,10 @@ class BinningNumericalTransformer(BaseEstimator, TransformerMixin):
             bins_lst = get_optbin_info_num(
                 data=pd.concat([X, y], axis=1), 
                 feature=f, 
-                target=TARGET
+                target=TARGET,
+                max_n_bins = self.max_n_bins,
+                min_bin_size = self.min_bin_size,
+                min_target_diff = self.min_target_diff
             )
               
             self.binning_results_dct[f] = bins_lst

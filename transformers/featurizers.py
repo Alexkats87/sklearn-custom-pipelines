@@ -37,7 +37,7 @@ class SimpleFeaturesTransformer(BaseEstimator, TransformerMixin):
         for f in self.num_features_lst:
             if (f in X.columns) and (NUM + f not in X.columns):
                 X.loc[X[f].astype(str).isin(["", "nan"]), f] = np.nan
-                X[NUM + f] = X[f].fillna(self.num_features_lst[f]).astype(float)
+                X[NUM + f] = pd.to_numeric(X[f], errors='coerce').fillna(self.num_features_lst[f]).astype(float)
 
         for f in self.cat_features_lst:
             if (f in X.columns) and (CAT + f not in X.columns):

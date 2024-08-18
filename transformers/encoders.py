@@ -4,6 +4,8 @@ import pandas as pd
 import logging
 
 from sklearn.base import BaseEstimator, TransformerMixin
+from sklearn.decomposition import PCA
+from sklearn.preprocessing import StandardScaler
 
 from feature_engine.encoding import WoEEncoder
 from feature_engine.selection import (
@@ -362,3 +364,49 @@ class DecorrelationTransformer(BaseEstimator, TransformerMixin):
             return pd.concat([X, y], axis=1)
         else:
             return X
+
+
+class CustomPCATransformer(BaseEstimator, TransformerMixin):
+    """
+        Custom PCA combined with standard scaler. 
+        Considers features to transform by "num__" prefix
+    """
+    
+    def __init__(self, n_components=None):
+        self.n_components = n_components
+        self.scaler = StandardScaler()
+        self.pca = PCA(n_components=n_components)
+
+    def fit(self, X, y=None):
+
+        self.num_features_lst = list(filter(lambda x: re.match(r"^(num__)", x), X.columns))
+
+        X_selected = X[self.num_features_lst]
+        X_selected = self.scaler.fit_transform(X_selected)
+
+        self.pca.fit(X_selected)
+        logger.info(f"PCA - top var ratios: {self.pca.explained_variance_ratio_[:6]}")
+        logger.info(f"PCA - fit done, total var ratio: {sum(self.pca.explained_variance_ratio_):5.4}")
+
+        return self
+
+    def transform(self, X, y=None):
+
+        X = X.copy()
+        
+        X_selected = X[self.num_features_lst]
+        X_selected = self.scaler.transform(X_selected)
+        X_other = X.drop(columns=self.num_features_lst)  # Other columns remain untouched     
+
+        # Apply PCA
+        X_pca = self.pca.transform(X_selected)
+        pca_comp_names = [f'num__pca{i+1}' for i in range(self.n_components)]
+        X_pca_df = pd.DataFrame(X_pca, columns=pca_comp_names, index=X.index)
+
+        # Combine PCA-transformed data with the untouched columns
+        X_combined = pd.concat([X_other, X_pca_df], axis=1)
+
+        if y is not None:
+            return pd.concat([X_combined, y], axis=1)
+        else:
+            return X_combined

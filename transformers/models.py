@@ -25,62 +25,44 @@ class CustomLogisticRegressionClassifier(BaseEstimator, ClassifierMixin):
     
     p_value_max = 0.05
 
-    def __init__(self, features_pattern = fr"\w+{BIN}{WOE}$", features_lst=None): 
+    def __init__(self, features_pattern = fr"\w+{BIN}{WOE}$"): 
         self.estimator = None  
-        self.features_lst = features_lst
         self.features_pattern = re.compile(features_pattern)
+        self.model_stats = None
 
     def fit(self, X, y):
         
         model_stats = None
-        
-        if self.features_lst:
-            logger.info(f"Modeling: LogisticRegression with fixed set of features.")
-            logger.debug(f" {self.features_lst}.")
+
+        while True:
+
             self.estimator = sm.Logit(
-                y, 
+                y,
                 sm.add_constant(X[self.features_lst])
-            ).fit(disp=0)
+            ).fit(disp=0)    
             
             model_stats = self.estimator.summary2().tables[1]
-
-        else:
             
-            logger.info(f"Modeling: LogisticRegression with feature selection.")
+            worst = model_stats['P>|z|'].idxmax()
+            worst_p = model_stats.loc[worst]['P>|z|']
             
-            self.features_lst = list(
-                filter(
-                    lambda x: re.match(self.features_pattern, x), X.columns
-                )
-            )
-
-            while True:
-
-                self.estimator = sm.Logit(
-                    y,
-                    sm.add_constant(X[self.features_lst])
-                ).fit(disp=0)    
+            if worst_p > self.p_value_max:
                 
-                model_stats = self.estimator.summary2().tables[1]
+                model_stats = model_stats.drop(worst)
+                self.features_lst.remove(worst)
+            
+                logger.debug(f"==========================")
+                logger.debug(f"Features cnt: {len(self.features_lst)}")
+                logger.debug(f"Dropped:      {worst}")
+                logger.debug(f"P-value:      {worst_p:0.4}")
                 
-                worst = model_stats['P>|z|'].idxmax()
-                worst_p = model_stats.loc[worst]['P>|z|']
-                
-                if worst_p > self.p_value_max:
-                    
-                    model_stats = model_stats.drop(worst)
-                    self.features_lst.remove(worst)
-                
-                    logger.info(f"==========================")
-                    logger.info(f"Features cnt: {len(self.features_lst)}")
-                    logger.info(f"Dropped:      {worst}")
-                    logger.info(f"P-value:      {worst_p:0.4}")
-                    
-                else:
-                    break
+            else:
+                break
 
         logger.info(f"Modeling: LogisticRegression - features amount:{len(self.features_lst)}")
         logger.info(f"Modeling: LogisticRegression - fit done.")
+        
+        self.model_stats = model_stats
         logger.debug(model_stats)
 
         return self
@@ -90,12 +72,7 @@ class CustomLogisticRegressionClassifier(BaseEstimator, ClassifierMixin):
         prediction = self.estimator.predict(
             sm.add_constant(X[self.features_lst], has_constant='add')
         ).to_list()
-        
-        # For testing: returns full dataset with prediction column
-        # if self.return_full_dataset:
-        #     X['y_pred'] = prediction
-        #     return X
-        
+
         # For test and batch prediction : returns full dataset with prediction column
         if X.shape[0] > 1:
             X['y_pred'] = prediction

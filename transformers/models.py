@@ -97,6 +97,9 @@ class CustomCatBoostClassifier(BaseEstimator, ClassifierMixin):
     excluding features with low feature importance after every model fit.
     
     """
+
+    importance_thr = 0.03
+    
     def __init__(self, **params):
         self.params = params
         self.estimator = CatBoostClassifier(**self.params)
@@ -136,7 +139,7 @@ class CustomCatBoostClassifier(BaseEstimator, ClassifierMixin):
                 self.estimator.get_feature_importance()
             ))
 
-            features_to_drop_set = set([key for key, value in importance_dct.items() if value <= 0.03])
+            features_to_drop_set = set([key for key, value in importance_dct.items() if value <= self.importance_thr])
 
             if not features_to_drop_set:
                 logger.info(f"Modeling: Catboost - Selected features amount: {len(self.cat_features_set | self.num_features_set)}")

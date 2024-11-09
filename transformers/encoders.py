@@ -226,45 +226,49 @@ class CustomMappingTransformer(BaseEstimator, TransformerMixin):
             return X
 
 
-class RareCategoriesTransformer(BaseEstimator, TransformerMixin):
+class CustomRareCategoriesTransformer(BaseEstimator, TransformerMixin):
     
-    def __init__(self, tol=0.01, n_categories=4):
+    def __init__(self, tol=0.001, n_categories=4, fill_na=MISSING, replace_with=OTHER):
         self.tol = tol
         self.n_categories = n_categories
         self.cat_features_lst = None
+        self.fill_na = fill_na
+        self.replace_with = replace_with
 
     def fit(self, X, y=None):
 
-        X = X.copy()
-        
-        self.cat_features_lst = list(
-            filter(
-                lambda x: re.match(f"^({CAT})", x), X.columns
-            )
-        )
-        
-        X[self.cat_features_lst] = X[self.cat_features_lst].astype(str)
+        self.cat_features_lst = list(filter(lambda x: re.match(r"^(cat__)", x), X.columns))
+        self.encoder_dict_ = {}
 
-        self.rare_encoder = RareLabelEncoder(
-            tol=self.tol,
-            n_categories=self.n_categories,
-            replace_with=OTHER,
-            variables=self.cat_features_lst,
-        )
+        for f in self.cat_features_lst:
+            if len(X[f].unique()) > self.n_categories:
 
-        self.rare_encoder.fit(X[self.cat_features_lst])
-        logger.info(f"Rare categories encoder - fit done.")
+                logger.debug(f"Rare categories encoder - process {f} with {len(X[f].unique())} unique categories.")
+
+                # if the variable has more than the indicated number of categories
+                # the encoder will learn the most frequent categories
+                t = X[f].fillna(self.fill_na).astype(str).value_counts(normalize=True)
+
+                # non-rare labels:
+                freq_idx = t[t >= self.tol].index
+                self.encoder_dict_[f] = list(freq_idx)
+
+            else:
+                self.encoder_dict_[f] = list(X[f].unique())
+        
+        logger.info(f"Rare categories encoder - fit done")
         
         return self
 
     def transform(self, X, y=None):
-        
         X = X.copy()
-        
-        X[self.cat_features_lst] = X[self.cat_features_lst].astype(str)
-        X[self.cat_features_lst] = self.rare_encoder.transform(X[self.cat_features_lst])
-        
-        logger.info(f"Rare categories encoder - transform done.")
+
+        for f in self.cat_features_lst:
+            if f in X.columns:
+                X[f] = X[f].fillna(self.fill_na).astype(str)
+                X.loc[~X[f].isin(self.encoder_dict_[f]), f] = (self.replace_with)
+
+        logger.info(f"Rare categories encoder - transform done")
                 
         if y is not None:
             return pd.concat([X, y], axis=1)

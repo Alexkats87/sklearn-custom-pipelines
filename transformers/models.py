@@ -118,17 +118,23 @@ class CustomCatBoostClassifier(BaseEstimator, ClassifierMixin):
         logger.info(f"Modeling: Catboost - params: {self.estimator.get_params()}")
         logger.info(f"Modeling: Catboost - Initial features amount: {len(self.cat_features_set | self.num_features_set)}")
 
+        X_valid = X.sample(frac=0.05, random_state=0)
+        X_train = X.drop(X_valid.index)
+
+        y_valid = y[X_valid.index]
+        y_train = y[X_train.index]
+
         # Feature selection process
         iter = 1
         while True:
 
             self.estimator.fit(
-                X=X[list(self.cat_features_set | self.num_features_set)],
-                y=y,
+                X=X_train[list(self.cat_features_set | self.num_features_set)],
+                y=y_train,
                 cat_features=list(self.cat_features_set),
                 eval_set=(
-                    X.sample(frac=0.05, random_state=42)[list(self.cat_features_set | self.num_features_set)],
-                    y.sample(frac=0.05, random_state=42)
+                    X_valid[list(self.cat_features_set | self.num_features_set)],
+                    y_valid
                 ),
                 early_stopping_rounds=early_stopping_rounds,
                 verbose=0,
@@ -139,7 +145,7 @@ class CustomCatBoostClassifier(BaseEstimator, ClassifierMixin):
                 self.estimator.get_feature_importance()
             ))
 
-            features_to_drop_set = set([key for key, value in importance_dct.items() if value <= self.importance_thr])
+            features_to_drop_set = set([key for key, value in importance_dct.items() if value <= 0.03])
 
             if not features_to_drop_set:
                 logger.info(f"Modeling: Catboost - Selected features amount: {len(self.cat_features_set | self.num_features_set)}")
@@ -150,9 +156,6 @@ class CustomCatBoostClassifier(BaseEstimator, ClassifierMixin):
                 logger.info(f"Iter. {iter}, dropped features amt: {len(features_to_drop_set)}")
 
             iter += 1
-            if iter == 15:
-                logger.info(f"Modeling: Catboost - Selected features amount: {len(self.cat_features_set | self.num_features_set)}")
-                break
 
         try:
             iterations_count = self.estimator.get_best_iteration() + 1

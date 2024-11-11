@@ -273,6 +273,53 @@ class CustomRareCategoriesTransformer(BaseEstimator, TransformerMixin):
             return pd.concat([X, y], axis=1)
         else:
             return X
+
+
+class PairedFeaturesTransformer(BaseEstimator, TransformerMixin):
+    
+    def __init__(self, features_pattern=r"^cat__*__bin$", max_cardinality=6):
+        self.features_pattern = re.compile(features_pattern)
+        self.max_cardinality = max_cardinality
+        self.features_to_pair = None
+
+    def fit(self, X, y=None):
+        
+        self.cat_features = list(
+            filter(
+                lambda x: re.match(
+                    self.features_pattern, x
+                    ), X.columns
+                )
+            )
+
+        cardinalities = X[self.cat_features].nunique()
+        self.features_to_pair = cardinalities[cardinalities.between(2, self.max_cardinality)].index.to_list()
+
+        return self
+
+    def transform(self, X, y=None):
+        X = X.copy()
+        
+        features_to_pair = [c for c in self.features_to_pair if c in X.columns]
+
+        features_pairs = (
+            list(combinations(features_to_pair, 2))
+        )
+
+        cnt = 0
+
+        for p in features_pairs:
+        
+            f_paired_name = SEP.join(p)
+            X[f_paired_name] = X[list(p)].apply(lambda row: SEP.join(row.values.astype(str)), axis=1)
+            cnt += 1
+
+        logger.info(f"Paired features: {cnt} - added.")
+        
+        if y is not None:
+            return pd.concat([X, y], axis=1)
+        else:
+            return X
         
         
 class DecorrelationTransformer(BaseEstimator, TransformerMixin):

@@ -24,8 +24,8 @@ class SimpleFeaturesTransformer(BaseEstimator, TransformerMixin):
     """
     
     def __init__(self, num_features_lst, cat_features_lst):
-        self.num_features_lst = num_features_lst
-        self.cat_features_lst = cat_features_lst
+        self.num_features_missings_dct = num_features_missings_dct
+        self.cat_features_missings_dct = cat_features_missings_dct
 
     def fit(self, X, y=None):
         return self
@@ -34,15 +34,17 @@ class SimpleFeaturesTransformer(BaseEstimator, TransformerMixin):
         
         X = X.copy()
         
-        for f in self.num_features_lst:
+        for f in self.num_features_missings_dct.keys():
             if (f in X.columns) and (NUM + f not in X.columns):
-                X.loc[X[f].astype(str).isin(["", "nan"]), f] = np.nan
-                X[NUM + f] = pd.to_numeric(X[f], errors='coerce').fillna(self.num_features_lst[f]).astype(float)
+                X[NUM + f] = X[f].replace("", np.nan).fillna(self.num_features_missings_dct[f]).astype(float)
+            else:
+                X[NUM + f] = float(self.num_features_missings_dct[f])
 
-        for f in self.cat_features_lst:
+        for f in self.cat_features_missings_dct.keys():
             if (f in X.columns) and (CAT + f not in X.columns):
-                X[CAT + f] = X[f].astype(str)
-                X.loc[X[CAT + f].isin(["", "nan"]), CAT + f] = self.cat_features_lst[f]
+                X[CAT + f] = X[f].fillna(self.cat_features_missings_dct[f]).astype(str)
+            else:
+                X[CAT + f] = self.cat_features_missings_dct[f]
 
         logger.info(f"Simple features - added.")
         

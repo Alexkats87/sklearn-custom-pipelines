@@ -58,13 +58,25 @@ class FeatureEliminationTransformer(BaseEstimator, TransformerMixin):
     """
     Dropping:
         - Duplicated features
-        - Constant and quasi constant
+        - Constant and quasi constant features
         - From highly-correlated features groups selected the most powerful
         - IV-based (information value) feature selection
 
     """
     
-    def __init__(self, correlation_thr=0.8, constant_share_thr=0.98, corr_features_selector_bins=5, iv_min=0.02, corr_features_selector_strategy='equal_width'):
+    def __init__(
+        self, 
+        correlation_thr=0.8, 
+        constant_share_thr=0.98, 
+        corr_features_selector_bins=5, 
+        iv_min=0.02, 
+        corr_features_selector_strategy='equal_width',
+        cat_features_pattern = r".*__bin$",
+        num_features_pattern = r"^(num__)"
+        
+    ):
+        self.cat_features_pattern = cat_features_pattern
+        self.num_features_pattern = num_features_pattern
         self.correlation_thr = correlation_thr
         self.constant_share_thr = constant_share_thr
         self.iv_min = iv_min
@@ -115,8 +127,8 @@ class FeatureEliminationTransformer(BaseEstimator, TransformerMixin):
         X = X.copy()
         self.features_to_drop = set()
 
-        self.cat_features_set = set(filter(lambda x: re.match(r".*__bin$", x), X.columns))
-        self.num_features_set = set(filter(lambda x: re.match(r"^(num__)", x), X.columns))
+        self.cat_features_set = set(filter(lambda x: re.match(self.cat_features_pattern, x), X.columns))
+        self.num_features_set = set(filter(lambda x: re.match(self.num_features_pattern, x), X.columns))
         self.all_features_set = self.cat_features_set.union(self.num_features_set)
         logger.info(f"Feature elimination - initial features count:      {len(self.all_features_set)}")
 
@@ -139,45 +151,48 @@ class FeatureEliminationTransformer(BaseEstimator, TransformerMixin):
         logger.info(f"Feature elimination - after constants dropping:     {len(self.all_features_set)}")
 
         # 3. Filter by IV (information value)
-        iv_dict = self._calculate_iv(X, y, list(self.cat_features_set))
-        iv_features_to_drop = [k for k,v in iv_dict.items() if ((v < self.iv_min) or (v > 0.45))]
-        self.cat_features_set = self.cat_features_set - set(iv_features_to_drop)
-        self.all_features_set = self.all_features_set - set(iv_features_to_drop)
-        self.features_to_drop = self.features_to_drop | set(iv_features_to_drop)
-        logger.info(f"Feature elimination - after IV filter:     {len(self.all_features_set)}")
+        if len(self.cat_features_set) > 0:
+            iv_dict = self._calculate_iv(X, y, list(self.cat_features_set))
+            iv_features_to_drop = [k for k,v in iv_dict.items() if ((v < self.iv_min) or (v > 0.45))]
+            self.cat_features_set = self.cat_features_set - set(iv_features_to_drop)
+            self.all_features_set = self.all_features_set - set(iv_features_to_drop)
+            self.features_to_drop = self.features_to_drop | set(iv_features_to_drop)
+            logger.info(f"Feature elimination - after IV filter:     {len(self.all_features_set)}")
         
+
         # 4. Detect groups of corr features
-        self.selector_corr = DropCorrelatedFeatures(variables=list(self.num_features_set), threshold=self.correlation_thr)   
-        self.selector_corr.fit(X)
-        correlated_feature_sets = self.selector_corr.correlated_feature_sets_
-        logger.info(f"Feature elimination - groups of corr features:      {len(correlated_feature_sets)}")
-
-        # 5. Select best features from groups of corr. features using SelectByTargetMeanPerformance class
-        for feature_set in correlated_feature_sets:
-            
-            feature_lst = list(feature_set)
-
-            logger.debug(f"Group size:  {len(feature_lst)}")
-            logger.debug(f"Features:    {feature_lst}")
-            
-            mean_target_selector = SelectByTargetMeanPerformance(
-                bins=self.corr_features_selector_bins, 
-                strategy=self.corr_features_selector_strategy
-            )
-            mean_target_selector.fit(X[feature_lst], y)
-            
-            feature_best = max(
-                mean_target_selector.feature_performance_, 
-                key=lambda k: mean_target_selector.feature_performance_[k]
-            )
-            
-            feature_lst.remove(feature_best)          
-
-            logger.debug(f"Best:        {feature_best}")
-            
-            self.num_features_set = self.num_features_set - set(feature_lst)
-            self.all_features_set = self.all_features_set - set(feature_lst)
-            self.features_to_drop = self.features_to_drop | set(feature_lst)
+        if len(self.num_features_set) > 0:
+            self.selector_corr = DropCorrelatedFeatures(variables=list(self.num_features_set), threshold=self.correlation_thr)   
+            self.selector_corr.fit(X)
+            correlated_feature_sets = self.selector_corr.correlated_feature_sets_
+            logger.info(f"Feature elimination - groups of corr features:      {len(correlated_feature_sets)}")
+    
+            # 5. Select best features from groups of corr. features using SelectByTargetMeanPerformance class
+            for feature_set in correlated_feature_sets:
+                
+                feature_lst = list(feature_set)
+    
+                logger.debug(f"Group size:  {len(feature_lst)}")
+                logger.debug(f"Features:    {feature_lst}")
+                
+                mean_target_selector = SelectByTargetMeanPerformance(
+                    bins=self.corr_features_selector_bins, 
+                    strategy=self.corr_features_selector_strategy
+                )
+                mean_target_selector.fit(X[feature_lst], y)
+                
+                feature_best = max(
+                    mean_target_selector.feature_performance_, 
+                    key=lambda k: mean_target_selector.feature_performance_[k]
+                )
+                
+                feature_lst.remove(feature_best)          
+    
+                logger.debug(f"Best:        {feature_best}")
+                
+                self.num_features_set = self.num_features_set - set(feature_lst)
+                self.all_features_set = self.all_features_set - set(feature_lst)
+                self.features_to_drop = self.features_to_drop | set(feature_lst)
 
         logger.info(f"Feature elimination - initial features count:      {len(self.all_features_set)}.")
         logger.info(f"Feature elimination - fit done.")
@@ -191,98 +206,6 @@ class FeatureEliminationTransformer(BaseEstimator, TransformerMixin):
         logger.info(f"Feature elimination - dropped  features count:   {len(self.features_to_drop)}.")
         logger.info(f"Feature elimination - selected features count:   {len(self.all_features_set)}.")
         logger.info(f"Feature elimination - transform done.")
-        
-        if y is not None:
-            return pd.concat([X, y], axis=1)
-        else:
-            return X
-        
-        
-class DecorrelationTransformer(BaseEstimator, TransformerMixin):
-    """
-    Detection and removing correlated features:
-        - Detect groups of correlated features
-        - From every group only one feature is selected based on mean target performance.
-          Other features will be dropped
-          
-    Input features detected by regex, for ex.:
-     - fr"^({NUM}|{CAT})\w+"  -  to filter features that start "num__" and "cat__"
-     - fr"\w+__bin$"  -   to filter features that end with "__bin"
-    
-    """
-    
-    def __init__(
-        self, 
-        correlation_thr=0.8, 
-        corr_features_selector_bins=5, 
-        corr_features_selector_strategy='equal_width',
-        features_pattern = fr"\w+{BIN}{WOE}$"
-    ):
-        self.correlation_thr = correlation_thr
-        self.corr_features_selector_bins = corr_features_selector_bins
-        self.corr_features_selector_strategy = corr_features_selector_strategy
-        self.features_pattern = re.compile(features_pattern)
-        self.features_to_drop = set()
-
-    def fit(self, X, y):
-
-        self.features_set = set(
-            filter(
-                lambda x: re.match(self.features_pattern, x), X.columns
-            )
-        )
-        
-        if len(self.features_set) <=0:
-            raise ValueError("Feature decorrelation - input features set is empty")
-        
-        logger.info(f"Feature decorrelation - initial features count:      {len(self.features_set)}.")
-
-        # Detect groups of corr features
-        self.selector_corr = DropCorrelatedFeatures(variables=list(self.features_set), threshold=self.correlation_thr)   
-        self.selector_corr.fit(X)
-        correlated_feature_sets = self.selector_corr.correlated_feature_sets_
-        logger.info(f"Feature decorrelation - groups of corr features:      {len(correlated_feature_sets)}")
-
-        # Select best features from groups of corr. features
-        for feature_set in correlated_feature_sets:
-            
-            feature_lst = list(feature_set)
-
-            logger.debug(f"Group size:  {len(feature_lst)}")
-            logger.debug(f"Features:    {feature_lst}")
-            
-            mean_target_selector = SelectByTargetMeanPerformance(
-                bins=self.corr_features_selector_bins, 
-                strategy=self.corr_features_selector_strategy
-            )
-            mean_target_selector.fit(X[feature_lst], y)
-            
-            feature_best = max(
-                mean_target_selector.feature_performance_, 
-                key=lambda k: mean_target_selector.feature_performance_[k]
-            )
-            
-            feature_lst.remove(feature_best)          
-
-            logger.debug(f"Best:        {feature_best}")
-            
-            self.features_set = self.features_set - set(feature_lst)
-
-        logger.info(f"Feature decorrelation - features count after:      {len(self.features_set)}.")
-        logger.info(f"Feature decorrelation - fit done.")
-        return self
-
-    def transform(self, X, y=None):
-
-        features_set = set(
-            filter(
-                lambda x: re.match(self.features_pattern, x), X.columns
-            )
-        )
-
-        X = X.drop(list(features_set - self.features_set), axis=1)
-
-        logger.info(f"Feature decorrelation - transform done.")
         
         if y is not None:
             return pd.concat([X, y], axis=1)

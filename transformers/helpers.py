@@ -41,7 +41,7 @@ def get_optbin_info_cat(data, feature, target=TARGET, max_n_bins=4, min_bin_size
 
 def get_optbin_info_num(data, feature, target=TARGET, max_n_bins=4, min_bin_size=0.09, min_target_diff=0.02):
     
-    x = pd.to_numeric(data[feature], errors='ignore').astype(float).fillna(NAN)
+    x = pd.to_numeric(data[feature], errors='coerce').astype(float).fillna(NAN)
     y = data[target].values
 
     optb = OptimalBinning(    

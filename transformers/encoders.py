@@ -105,18 +105,21 @@ class BinningCategoriesTransformer(BaseEstimator, TransformerMixin):
         self.binning_results_dct = {}
 
         for f in self.features_lst:
-        
-            bins_map_dct = get_optbin_info_cat(
-                data=pd.concat([X, y], axis=1), 
-                feature=f, 
-                target=TARGET,
-                max_n_bins = self.max_n_bins,
-                min_bin_size = self.min_bin_size,
-                min_target_diff = self.min_target_diff
-            )
-     
-            self.binning_results_dct[f] = bins_map_dct
-            logger.debug(f"Processed: {f:50} , bins: {len(bins_map_dct.keys())}")
+            try:
+                bins_map_dct = get_optbin_info_cat(
+                    data=pd.concat([X, y], axis=1), 
+                    feature=f, 
+                    target=TARGET,
+                    max_n_bins = self.max_n_bins,
+                    min_bin_size = self.min_bin_size,
+                    min_target_diff = self.min_target_diff
+                )
+                self.binning_results_dct[f] = bins_map_dct
+                logger.debug(f"Processed: {f:50} , bins: {len(bins_map_dct.keys())}")
+
+            except Exception as e:
+                logger.error(f"Cat. binning - can't fit {f}: {e}.")
+                
 
         logger.info(f"Cat. binning - fit done.")
         return self
@@ -127,15 +130,18 @@ class BinningCategoriesTransformer(BaseEstimator, TransformerMixin):
 
         for f in self.features_lst:
             if f in X.columns:
-                
-                X[f + BIN] = (
-                    X[f].astype(str)
-                        .map(get_values_map(self.binning_results_dct[f]))
-                        .fillna(MISSING)
-                )
-        
+                try:
+                    X[f + BIN] = (
+                        X[f].astype(str)
+                            .map(get_values_map(self.binning_results_dct[f]))
+                            .fillna(MISSING)
+                    )
+
+                except Exception as e:
+                    logger.error(f"Cat. binning - can't transform {f}: {e}.")
+
         logger.info(f"Cat. binning - tranfsorm done.")
-        
+
         if y is not None:
             return pd.concat([X, y], axis=1)
         else:
@@ -160,18 +166,21 @@ class BinningNumericalTransformer(BaseEstimator, TransformerMixin):
         self.binning_results_dct = {}
 
         for f in self.features_lst:
-        
-            bins_lst = get_optbin_info_num(
-                data=pd.concat([X, y], axis=1), 
-                feature=f, 
-                target=TARGET,
-                max_n_bins = self.max_n_bins,
-                min_bin_size = self.min_bin_size,
-                min_target_diff = self.min_target_diff
-            )
-              
-            self.binning_results_dct[f] = bins_lst
-            logger.debug(f"Processed: {f:50} , bins: {len(bins_lst) - 1}")
+            try:
+                bins_lst = get_optbin_info_num(
+                    data=pd.concat([X, y], axis=1), 
+                    feature=f, 
+                    target=TARGET,
+                    max_n_bins = self.max_n_bins,
+                    min_bin_size = self.min_bin_size,
+                    min_target_diff = self.min_target_diff
+                )
+                  
+                self.binning_results_dct[f] = bins_lst
+                logger.debug(f"Processed: {f:50} , bins: {len(bins_lst) - 1}")
+
+            except Exception as e:
+                logger.error(f"Num. binning - can't fit {f}: {e}.")
 
         logger.info(f"Num. binning - fit done.")
         return self
@@ -184,16 +193,19 @@ class BinningNumericalTransformer(BaseEstimator, TransformerMixin):
 
         for f in self.features_lst:
             if f in X.columns:
-                
-                X[f + BIN] = pd.cut(
-                    X[f], 
-                    self.binning_results_dct[f], 
-                    precision=0, 
-                    include_lowest=True, 
-                    right=False
-                ).astype(str).fillna(MISSING)
-                
-                X[f + BIN] = X[f + BIN].astype(str)
+                try
+                    X[f + BIN] = pd.cut(
+                        X[f], 
+                        self.binning_results_dct[f], 
+                        precision=0, 
+                        include_lowest=True, 
+                        right=False
+                    ).astype(str).fillna(MISSING)
+                    
+                    X[f + BIN] = X[f + BIN].astype(str)
+
+                except Exception as e:
+                    logger.error(f"Num. binning - can't transform {f}: {e}.")
         
         logger.info(f"Num. binning - tranfsorm done.")
         

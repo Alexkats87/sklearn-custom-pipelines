@@ -92,14 +92,12 @@ class CustomLogisticRegressionClassifier(BaseEstimator, ClassifierMixin):
     
     
 class CustomCatBoostClassifier(BaseEstimator, ClassifierMixin):
+
     """    
     Fit CatBoostClassifier model, perform iterative feature selection
     excluding features with low feature importance after every model fit.
-    
     """
 
-    importance_thr = 0.03
-    
     def __init__(self, **params):
         self.params = params
         self.estimator = CatBoostClassifier(**self.params)
@@ -110,6 +108,28 @@ class CustomCatBoostClassifier(BaseEstimator, ClassifierMixin):
         self.params.update(params)
         self.estimator = CatBoostClassifier(**self.params)
         return self
+
+    def _calc_feature_importance(self):
+        
+        importance_lst = self.estimator.get_feature_importance()
+        features_lst = self.estimator.feature_names_
+        
+        df_cb_importance = pd.DataFrame(
+            index=features_lst, 
+            data=importance_lst
+        ).reset_index().rename(
+            columns={
+                0:'importance', 
+                'index':'feature'
+            }
+        )
+        
+        df_cb_importance = df_cb_importance.sort_values(
+            by='importance', 
+            ascending=False
+        ).reset_index(drop=True)
+
+        return df_cb_importance
 
     def fit(self, X, y, eval_set=None, early_stopping_rounds=None, **params):
         self.cat_features_set = set(filter(lambda x: re.match(r".*__bin$", x), X.columns))
@@ -124,7 +144,7 @@ class CustomCatBoostClassifier(BaseEstimator, ClassifierMixin):
         y_valid = y[X_valid.index]
         y_train = y[X_train.index]
 
-        # Feature selection process
+        # Feature selection process based on Catboost feature importances
         iter = 1
         while True:
 
@@ -139,13 +159,13 @@ class CustomCatBoostClassifier(BaseEstimator, ClassifierMixin):
                 early_stopping_rounds=early_stopping_rounds,
                 verbose=0,
             )
-            
+
             importance_dct = dict(zip(
                 self.estimator.feature_names_,
                 self.estimator.get_feature_importance()
             ))
 
-            features_to_drop_set = set([key for key, value in importance_dct.items() if value <= 0.03])
+            features_to_drop_set = set([key for key, value in importance_dct.items() if value <= 0.01])
 
             if not features_to_drop_set:
                 logger.info(f"Modeling: Catboost - Selected features amount: {len(self.cat_features_set | self.num_features_set)}")
@@ -166,9 +186,21 @@ class CustomCatBoostClassifier(BaseEstimator, ClassifierMixin):
         self.params['cat_features'] = list(self.cat_features_set)
         self.params['iterations'] = iterations_count
         logger.info(f"Modeling: Catboost on fit - params: {self.estimator.get_params()}")
-        
+
+        self.estimator.fit(
+            X=X_train[list(self.cat_features_set | self.num_features_set)],
+            y=y_train,
+            cat_features=list(self.cat_features_set),
+            eval_set=(
+                X_valid[list(self.cat_features_set | self.num_features_set)],
+                y_valid
+            ),
+            early_stopping_rounds=early_stopping_rounds,
+            verbose=0,
+        )
+
         self.model_calibr = CalibratedClassifierCV(
-            base_estimator=CatBoostClassifier(**self.params),
+            estimator=CatBoostClassifier(**self.params),
             method='sigmoid'
         )
 
@@ -176,7 +208,10 @@ class CustomCatBoostClassifier(BaseEstimator, ClassifierMixin):
             X=X[list(self.cat_features_set | self.num_features_set)], 
             y=y
         )
-        
+
+        self.feature_names_ = self.estimator.feature_names_
+        self.feature_importances_df = self._calc_feature_importance()
+
         logger.info(f"Modeling: Catboost - fit done.")
 
         return self
@@ -186,11 +221,14 @@ class CustomCatBoostClassifier(BaseEstimator, ClassifierMixin):
         # Make sure that:
         # - cat features are only `str` or `int` types
         # - num features are only `float` type
+
         X[list(self.cat_features_set)] = X[list(self.cat_features_set)].astype(str)
         X[list(self.num_features_set)] = X[list(self.num_features_set)].astype(float)
-        
+
         # During prediction pass features in exactly the same order as they were used to train Catboost
+        # prediction = self.estimator.predict_proba(X[self.estimator.feature_names_])
         prediction = self.model_calibr.predict_proba(X[self.estimator.feature_names_])
+        
         logger.info(f"Modeling: Catboost - prediction done.")
         logger.info("=" * 50)
 

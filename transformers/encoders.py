@@ -289,10 +289,42 @@ class CustomRareCategoriesTransformer(BaseEstimator, TransformerMixin):
 
 class PairedFeaturesTransformer(BaseEstimator, TransformerMixin):
     
-    def __init__(self, features_pattern=r"^cat__*__bin$", max_cardinality=6):
+    def __init__(self, features_pattern=r".*__bin$", max_cardinality=6, iv_min=0.01, iv_max=0.5):
         self.features_pattern = re.compile(features_pattern)
         self.max_cardinality = max_cardinality
         self.features_to_pair = None
+        self.iv_min = iv_min
+        self.iv_max = iv_max
+
+    @staticmethod
+    def _calculate_iv(X, y, feature):
+        """
+        Calculate the Information Value (IV) for feature.
+        """
+
+        # Combine X[feature] and y into a DataFrame for processing
+        df = pd.concat([X[feature], y], axis=1)
+        df.columns = [feature, 'target']
+
+        # Calculate the distribution of bad and good (target 1 and 0)
+        total_bad = df['target'].sum()
+        total_good = df['target'].count() - total_bad
+
+        # Group by feature and calculate the WoE and IV
+        grouped = df.groupby(feature).agg({'target': ['sum', 'count']})
+        grouped.columns = ['bad', 'total']
+        grouped['good'] = grouped['total'] - grouped['bad']
+
+        # To avoid division by zero, add a small constant to good and bad
+        grouped['bad_dist'] = grouped['bad'] / total_bad
+        grouped['good_dist'] = grouped['good'] / total_good
+        grouped['woe'] = np.log((grouped['good_dist'] + 1e-9) / (grouped['bad_dist'] + 1e-9))
+        grouped['iv'] = (grouped['good_dist'] - grouped['bad_dist']) * grouped['woe']
+    
+        # Sum IV for the feature
+        iv = grouped['iv'].sum()
+        
+        return iv
 
     def fit(self, X, y=None):
         
@@ -304,27 +336,52 @@ class PairedFeaturesTransformer(BaseEstimator, TransformerMixin):
                 )
             )
 
+        # Select candidates to pair by cardinality
         cardinalities = X[self.cat_features].nunique()
-        self.features_to_pair = cardinalities[cardinalities.between(2, self.max_cardinality)].index.to_list()
+        features_to_pair_lst = cardinalities[cardinalities.between(2, self.max_cardinality)].index.to_list()
+
+        # List of pairs
+        all_features_pairs_lst = (
+            list(combinations(features_to_pair_lst, 2))
+        )
+
+        logger.info(f"Paired features fit: {len(features_to_pair_lst)} features to pair.")
+        logger.info(f"Paired features fit: {len(all_features_pairs_lst)} candidates for paired features to add.")
+
+        cnt = 0
+
+        self.features_pairs_lst = []
+
+        for p in all_features_pairs_lst:
+        
+            f_paired_name = SEP.join(p)
+            X[f_paired_name] = X[p[0]].astype(str) + SEP + X[p[1]].astype(str)
+
+            iv = self._calculate_iv(X, y, f_paired_name)
+
+            if self.iv_min < iv < self.iv_max:
+                self.features_pairs_lst.append(p)
+                logger.debug(f"Paired features fit: {f_paired_name} to add with IV={iv:0.3}")
+            else:
+                del X[f_paired_name]
+
+            cnt += 1
+
+        logger.info(f"Paired features fit: {len(self.features_pairs_lst)} paired features to add.")
 
         return self
 
     def transform(self, X, y=None):
         X = X.copy()
-        
-        features_to_pair = [c for c in self.features_to_pair if c in X.columns]
-
-        features_pairs = (
-            list(combinations(features_to_pair, 2))
-        )
 
         cnt = 0
 
-        for p in features_pairs:
+        for p in self.features_pairs_lst:
         
             f_paired_name = SEP.join(p)
-            X[f_paired_name] = X[list(p)].apply(lambda row: SEP.join(row.values.astype(str)), axis=1)
-            cnt += 1
+            if (p[0] in X.columns) and (p[1] in X.columns):
+                X[f_paired_name] = X[p[0]].astype(str) + SEP + X[p[1]].astype(str)
+                cnt += 1
 
         logger.info(f"Paired features: {cnt} - added.")
         

@@ -1,0 +1,14 @@
+# UV configuration file for sklearn-custom-pipelines
+
+# Python version to use
+python-version = "3.8"
+
+# Allow pre-releases (set to true if needed for compatibility)
+allow-prerelease-dependencies = false
+
+# Index to use (optional, defaults to PyPI)
+# index-url = "https://pypi.org/simple/"
+
+# Install options
+# offline = false
+# no-cache = false

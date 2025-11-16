@@ -1,0 +1,18 @@
+# Pinned dependencies for sklearn-custom-pipelines
+# Python 3.8+ arm64 (Apple Silicon) compatible versions
+# Updated for compatibility with Python 3.8.20 on M1/M2/M3
+
+# Core dependencies
+numpy>=1.20.0
+scikit-learn>=0.24.0
+pandas>=1.2.0
+scipy>=1.6.0
+
+# ML/Feature Engineering
+feature-engine>=1.2.0
+statsmodels>=0.13.0
+optbinning>=0.11.0
+catboost>=1.0.0
+
+# Utilities
+protobuf>=3.20.2

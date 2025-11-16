@@ -1,0 +1,34 @@
+[project]
+name = "sklearn-custom-pipelines"
+version = "0.1.0"
+description = "A collection of custom scikit-learn transformers for ML pipelines"
+readme = "README.md"
+license = {text = "MIT"}
+authors = [
+    {name = "Alex Kats", email = "your-email@example.com"}
+]
+requires-python = ">=3.8"
+dependencies = [
+    "scikit-learn>=0.24.0",
+    "numpy>=1.20.0",
+    "pandas>=1.2.0",
+    "protobuf>=3.20.2",
+    "scipy>=1.6.0",
+    "feature-engine>=1.2.0",
+    "statsmodels>=0.13.0",
+    "optbinning>=0.11.0",
+    "catboost>=1.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=6.0",
+    "pytest-cov>=2.10",
+    "black>=21.0",
+    "flake8>=3.9",
+    "sphinx>=4.0",
+]
+
+[build-system]
+requires = ["setuptools>=45", "wheel"]
+build-backend = "setuptools.build_meta"

@@ -1,0 +1,6 @@
+"""Manifest file for package data."""
+
+include README.md
+include LICENSE
+include requirements.txt
+recursive-include sklearn_custom_pipelines *.py

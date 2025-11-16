@@ -68,6 +68,14 @@ instance/
 # Scrapy stuff:
 .scrapy
 
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+.env
+.uvenv/
+
 # Sphinx documentation
 docs/_build/
 

@@ -2,11 +2,10 @@
 
 import re
 import pandas as pd
-import numpy as np
 import logging
 import operator
 
-from itertools import combinations, groupby
+from itertools import combinations
 from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.preprocessing import PowerTransformer
 
@@ -20,7 +19,7 @@ from sklearn_custom_pipelines.utils.helpers import (
     calculate_woe,
     calculate_iv
 )
-from sklearn_custom_pipelines.utils.custom_mappings import features_custom_mappings_dct
+
 
 logger = logging.getLogger(__name__)
 
@@ -311,7 +310,7 @@ class CustomMappingTransformer(BaseEstimator, TransformerMixin):
     def fit(self, X, y=None):
         """Fit the transformer (no-op for this transformer)."""
         if self.features_mappings_dct:
-            logger.debug(f"CustomMapping - fit called with {len(self.features_mappings_dct)} mappings")
+            logger.info(f"CustomMapping - {len(self.features_mappings_dct)} mappings will be applied")
         return self
 
     def transform(self, X, y=None):
@@ -337,11 +336,13 @@ class CustomMappingTransformer(BaseEstimator, TransformerMixin):
                 
                 # Log results
                 if unmapped_count > 0:
-                    logger.info(f"CustomMapping - {f}: applied mapping, {unmapped_count} unmapped values filled with {MISSING}")
+                    logger.debug(f"CustomMapping - {f}: applied mapping, {unmapped_count} unmapped values filled with {MISSING}")
                 else:
-                    logger.info(f"CustomMapping - {f}: applied mapping successfully")
+                    logger.debug(f"CustomMapping - {f}: applied mapping successfully")
             else:
-                logger.warning(f"CustomMapping - {f}: column not found in data, skipping")
+                logger.debug(f"CustomMapping - {f}: column not found in data, skipping")
+
+        logger.info(f"CustomMapping - applied")
 
         if y is not None:
             return pd.concat([X, y], axis=1)
@@ -492,9 +493,6 @@ class PairedFeaturesTransformer(BaseEstimator, TransformerMixin):
             list(combinations(features_to_pair_lst, 2))
         )
 
-        logger.info(f"Paired features fit: {len(features_to_pair_lst)} features to pair.")
-        logger.info(f"Paired features fit: {len(all_features_pairs_lst)} candidates for paired features to add.")
-
         cnt = 0
 
         self.features_pairs_lst = []
@@ -617,9 +615,6 @@ class PairedBinaryFeaturesTransformer(BaseEstimator, TransformerMixin):
         all_paired_features_lst = (
             list(combinations(self.bin_features, 2))
         )
-        
-        logger.info(f"Paired bin features fit: {len(self.bin_features)} features to pair.")
-        logger.info(f"Paired bin features fit: {len(all_paired_features_lst)} candidates for paired features to add.")
 
         # Total added features count
         cnt = 0
@@ -638,7 +633,7 @@ class PairedBinaryFeaturesTransformer(BaseEstimator, TransformerMixin):
     
                 if self.iv_min < iv < self.iv_max:
                     self.features_pairs_lst.append((p, op))
-                    logger.info(f"Paired features fit: {f_paired_name} to add with IV={iv:0.3}")
+                    logger.debug(f"Paired features fit: {f_paired_name} to add with IV={iv:0.3}")
                 else:
                     del X[f_paired_name]
     

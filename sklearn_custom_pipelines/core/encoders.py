@@ -366,33 +366,3 @@ class RareCategoriesTransformer(BaseEstimator, TransformerMixin):
         else:
             return X
 
-
-class CustomRareCategoriesTransformer(BaseEstimator, TransformerMixin):
-    """
-    Alias for RareCategoriesTransformer for backward compatibility.
-
-    See RareCategoriesTransformer for documentation.
-    """
-
-    def __init__(
-        self,
-        tol=0.001,
-        n_categories=4,
-        fill_na=MISSING,
-        replace_with=OTHER
-    ):
-        self.rare_transformer = RareCategoriesTransformer(
-            tol=tol,
-            n_categories=n_categories,
-            fill_na=fill_na,
-            replace_with=replace_with
-        )
-
-    def fit(self, X, y=None):
-        """Fit the transformer."""
-        self.rare_transformer.fit(X, y)
-        return self
-
-    def transform(self, X, y=None):
-        """Transform the data."""
-        return self.rare_transformer.transform(X, y)

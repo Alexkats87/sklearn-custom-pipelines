@@ -473,7 +473,7 @@ class PairedFeaturesTransformer(BaseEstimator, TransformerMixin):
                 cnt += 1
 
         logger.info(f"Paired features: {cnt} - added.")
-        
+
         if y is not None:
             return pd.concat([X, y], axis=1)
         else:
@@ -608,3 +608,5 @@ class PairedBinaryFeaturesTransformer(BaseEstimator, TransformerMixin):
         
         if y is not None:
             return pd.concat([X, y], axis=1)
+        else:
+            return X

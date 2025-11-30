@@ -24,6 +24,8 @@ from sklearn_custom_pipelines import (
     BinningNumericalTransformer,
     BinningCategoriesTransformer,
     WoeEncoderTransformer,
+        PairedFeaturesTransformer,
+        PairedBinaryFeaturesTransformer,
     CustomLogisticRegressionClassifier,
 )
 from sklearn_custom_pipelines.utils.const import NUM, BIN, WOE, MISSING
@@ -31,7 +33,7 @@ from sklearn_custom_pipelines.utils.const import NUM, BIN, WOE, MISSING
 logging.basicConfig(format='%(asctime)s - %(levelname)s - %(message)s', level=logging.INFO)
 
 
-def create_synthetic_data(n_samples=500, random_state=42):
+def create_synthetic_data(n_samples=5000, random_state=42):
     """Create synthetic dataset for demonstration."""
     np.random.seed(random_state)
     
@@ -46,23 +48,63 @@ def create_synthetic_data(n_samples=500, random_state=42):
         'os_version': np.random.choice(['Android 10', 'Android 11', 'iOS 14', None], n_samples),
         'telco_carrier': np.random.choice(['Carrier1', 'Carrier2', 'Carrier3', None], n_samples),
         'network_type': np.random.choice(['WiFi', '4G', '5G', None], n_samples),
-        'y': np.random.randint(0, 2, n_samples)
+        # Binary flag features for PairedBinaryFeaturesTransformer (strings)
+        'cat__flag__a': np.random.binomial(1, 0.15, n_samples).astype(str),
+        'cat__flag__b': np.random.binomial(1, 0.25, n_samples).astype(str),
+        'cat__flag__c': np.random.binomial(1, 0.10, n_samples).astype(str),
     }
     
-    return pd.DataFrame(data)
+    df = pd.DataFrame(data)
+
+    # Additional informative numeric features
+    df['usage_minutes'] = np.random.exponential(scale=30, size=n_samples)
+    df['num_errors'] = np.random.poisson(1.5, n_samples)
+    df['app_count'] = np.random.randint(1, 25, n_samples)
+    df['device_age_months'] = np.random.randint(1, 72, n_samples)
+
+    # Additional categorical feature with signal
+    df['recent_activity'] = np.random.choice(['low', 'medium', 'high'], n_samples, p=[0.35, 0.45, 0.2])
+    df['user_segment'] = np.random.choice(['A', 'B', 'C'], n_samples, p=[0.5, 0.3, 0.2])
+
+    # Map categorical to numeric for signal construction
+    recent_map = {'low': 0, 'medium': 1, 'high': 2}
+    df['recent_activity_num'] = df['recent_activity'].map(recent_map)
+
+    # Build a logistic signal for y using several features (plus noise)
+    # Convert some categorical indicators to numeric
+    is_charging_flag = (df['is_charging'] == 'Yes').astype(float)
+
+    # linear combination -> probability via sigmoid
+    logits = (
+        -3.0
+        + 0.02 * df['battery_level']
+        + 0.03 * df['usage_minutes']
+        + 0.5 * df['recent_activity_num']
+        + 0.15 * df['app_count']
+        - 0.2 * df['num_errors']
+        + 0.6 * is_charging_flag
+    )
+    probs = 1.0 / (1.0 + np.exp(-logits))
+
+    # Sample y from Bernoulli(probs)
+    df['y'] = np.random.binomial(1, probs)
+
+    return df
 
 
 if __name__ == "__main__":
     
     # Create synthetic data
-    df = create_synthetic_data(n_samples=500)
+    # create a larger dataset so the test split contains more objects
+    df = create_synthetic_data(n_samples=5000)
     
     y = df['y']
     X = df.drop('y', axis=1)
 
     # Split into train and test
+    # increase test_size so the test set contains more examples
     X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=0.2, random_state=42
+        X, y, test_size=0.3, random_state=42
     )
     
     # Define features and how to fill missings
@@ -91,6 +133,10 @@ if __name__ == "__main__":
         ("rare_encoder_tr", RareCategoriesTransformer()),
         ("binning_num_tr", BinningNumericalTransformer()),
         ("binning_cat_tr", BinningCategoriesTransformer()),
+        # Add paired categorical interactions on binned features
+        ("paired_features_tr", PairedFeaturesTransformer(features_pattern=fr".*{BIN}$")),
+        # Paired binary interactions for flag features (if present)
+        ("paired_bin_tr", PairedBinaryFeaturesTransformer(features_pattern=r"cat__flag__")),
         ("woe_tr", WoeEncoderTransformer()),
         ("feature_elimination_tr2", FeatureEliminationTransformer(
             features_pattern=fr"\w+{BIN}{WOE}$"

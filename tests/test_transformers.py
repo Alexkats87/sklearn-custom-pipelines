@@ -409,6 +409,74 @@ class TestCalculateWOE:
             assert np.isfinite(value)
 
 
+class TestPairedFeaturesTransformer:
+    """Test PairedFeaturesTransformer class."""
+
+    def test_paired_features_basic(self):
+        """Fit and transform with two small binned categorical features."""
+        from sklearn_custom_pipelines.core.encoders import PairedFeaturesTransformer
+        import pandas as pd
+        from sklearn_custom_pipelines.utils.const import SEP
+
+        # Small synthetic binned data
+        X = pd.DataFrame({
+            'f1__bin': ['A', 'A', 'B', 'B', 'A', 'B'],
+            'f2__bin': ['X', 'Y', 'X', 'Y', 'X', 'Y'],
+        })
+        y = pd.Series([1, 1, 0, 0, 1, 0])
+
+        # Use permissive IV thresholds so pairs are considered
+        tf = PairedFeaturesTransformer(iv_min=0.0, iv_max=10.0)
+        tf.fit(X.copy(), y)
+
+        # features_pairs_lst should be a list (possibly empty)
+        assert isinstance(tf.features_pairs_lst, list)
+
+        X_t = tf.transform(X.copy(), y)
+
+        # If any pairs selected, the corresponding combined column should exist
+        if tf.features_pairs_lst:
+            p = tf.features_pairs_lst[0]
+            combined_name = SEP.join(p)
+            assert combined_name in X_t.columns
+
+
+class TestPairedBinaryFeaturesTransformer:
+    """Test PairedBinaryFeaturesTransformer class."""
+
+    def test_paired_binary_basic(self):
+        """Fit and transform on binary flag features."""
+        from sklearn_custom_pipelines.core.encoders import PairedBinaryFeaturesTransformer
+        import pandas as pd
+        import numpy as np
+        from sklearn_custom_pipelines.utils.const import SEP
+
+        n = 200
+        # Create two binary flags and make target dependent on OR of flags
+        f1 = np.random.binomial(1, 0.2, n).astype(str)
+        f2 = np.random.binomial(1, 0.3, n).astype(str)
+        X = pd.DataFrame({
+            'cat__flag__a': f1,
+            'cat__flag__b': f2,
+        })
+        # y is OR of flags (as ints)
+        y = ( (f1.astype(int) | f2.astype(int)) ).astype(int)
+        y = pd.Series(y)
+
+        tf = PairedBinaryFeaturesTransformer(iv_min=0.0, iv_max=10.0)
+        tf.fit(X.copy(), y)
+
+        # features_pairs_lst should be a list
+        assert isinstance(tf.features_pairs_lst, list)
+
+        X_t = tf.transform(X.copy(), y)
+
+        # If any pairs selected, their combined columns (with op suffix) should exist
+        if tf.features_pairs_lst:
+            for (pair, op) in tf.features_pairs_lst:
+                combined_name = SEP.join(pair) + SEP + op
+                assert combined_name in X_t.columns
+
 if __name__ == '__main__':
     pytest.main([__file__, '-v'])
 

@@ -23,6 +23,7 @@ try:
         RareCategoriesTransformer,
         BinningNumericalTransformer,
         BinningCategoriesTransformer,
+        PairedBinaryFeaturesTransformer,
         CustomMappingTransformer,
     )
 
@@ -41,6 +42,7 @@ __all__ = [
     "FeatureEliminationTransformer",
     "DecorrelationTransformer",
     "PairedFeaturesTransformer",
+    "PairedBinaryFeaturesTransformer",
     "CustomPCATransformer",
     # Encoders
     "WoeEncoderTransformer",

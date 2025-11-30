@@ -10,22 +10,18 @@ import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 
-def create_synthetic_dataset(n_samples=100, random_state=42):
+@pytest.fixture
+def synthetic_dataset():
     """
-    Create a synthetic dataset for testing transformers.
+    Pytest fixture that creates a synthetic dataset for testing transformers.
     
-    Parameters
-    ----------
-    n_samples : int, default=100
-        Number of samples to generate
-    random_state : int, default=42
-        Random seed for reproducibility
-        
     Returns
     -------
     tuple
         (X, y) - Features dataframe and target series
     """
+    n_samples = 100
+    random_state = 42
     np.random.seed(random_state)
     
     data = {
@@ -75,9 +71,9 @@ def create_synthetic_dataset(n_samples=100, random_state=42):
     return X, y
 
 
-def test_synthetic_data_creation():
+def test_synthetic_data_creation(synthetic_dataset):
     """Test that synthetic data can be created successfully."""
-    X, y = create_synthetic_dataset(n_samples=100)
+    X, y = synthetic_dataset
     
     assert X.shape == (100, 10)
     assert y.shape == (100,)
@@ -100,11 +96,11 @@ class TestSimpleFeaturesTransformer:
         assert transformer.num_features_missings_dct == num_features
         assert transformer.cat_features_missings_dct == cat_features
     
-    def test_transformer_fit(self):
+    def test_transformer_fit(self, synthetic_dataset):
         """Test that transformer can be fitted."""
         from sklearn_custom_pipelines import SimpleFeaturesTransformer
         
-        X, y = create_synthetic_dataset(n_samples=50)
+        X, y = synthetic_dataset
         
         num_features = {'battery_level': 50.0, 'gps_location_lat': 0.0}
         cat_features = {'device_model': '__MISSING__'}
@@ -114,11 +110,11 @@ class TestSimpleFeaturesTransformer:
         
         assert transformer is not None
     
-    def test_transformer_transform(self):
+    def test_transformer_transform(self, synthetic_dataset):
         """Test that transformer can transform data."""
         from sklearn_custom_pipelines import SimpleFeaturesTransformer
         
-        X, y = create_synthetic_dataset(n_samples=50)
+        X, y = synthetic_dataset
         
         num_features = {'battery_level': 50.0}
         cat_features = {'device_model': '__MISSING__'}
@@ -132,12 +128,12 @@ class TestSimpleFeaturesTransformer:
         assert 'cat__device_model' in X_transformed.columns
         assert X_transformed.shape[0] == X.shape[0]
     
-    def test_transformer_pipeline_compatibility(self):
+    def test_transformer_pipeline_compatibility(self, synthetic_dataset):
         """Test that transformer works with sklearn Pipeline."""
         from sklearn.pipeline import Pipeline
         from sklearn_custom_pipelines import SimpleFeaturesTransformer
         
-        X, y = create_synthetic_dataset(n_samples=50)
+        X, y = synthetic_dataset
         
         num_features = {'battery_level': 50.0}
         cat_features = {'device_model': '__MISSING__'}
@@ -164,11 +160,11 @@ class TestRareCategoriesTransformer:
         assert transformer.tol == 0.01
         assert transformer.n_categories == 5
     
-    def test_transformer_fit(self):
+    def test_transformer_fit(self, synthetic_dataset):
         """Test that transformer can be fitted."""
         from sklearn_custom_pipelines import RareCategoriesTransformer, SimpleFeaturesTransformer
         
-        X, y = create_synthetic_dataset(n_samples=100)
+        X, y = synthetic_dataset
         
         # First add categorical prefixes
         num_features = {}
@@ -183,11 +179,11 @@ class TestRareCategoriesTransformer:
         assert transformer.cat_features_lst is not None
         assert len(transformer.encoder_dict_) > 0
     
-    def test_transformer_transform(self):
+    def test_transformer_transform(self, synthetic_dataset):
         """Test that transformer can transform data."""
         from sklearn_custom_pipelines import RareCategoriesTransformer, SimpleFeaturesTransformer
         
-        X, y = create_synthetic_dataset(n_samples=100)
+        X, y = synthetic_dataset
         
         num_features = {}
         cat_features = {'device_model': '__MISSING__', 'device_type': '__MISSING__'}
@@ -214,7 +210,7 @@ class TestWoeEncoderTransformer:
         
         assert transformer.zero_filler == 0.001
     
-    def test_woe_encoder_workflow(self):
+    def test_woe_encoder_workflow(self, synthetic_dataset):
         """Test complete WOE encoding workflow."""
         from sklearn_custom_pipelines import (
             SimpleFeaturesTransformer,
@@ -223,8 +219,9 @@ class TestWoeEncoderTransformer:
             WoeEncoderTransformer
         )
         
-        X, y = create_synthetic_dataset(n_samples=200)
+        X, y = synthetic_dataset
         
+        # For this test, we'll use the fixture data (100 samples is sufficient)
         # Create pipeline
         num_features = {}
         cat_features = {'device_model': '__MISSING__', 'device_type': '__MISSING__'}
@@ -259,14 +256,14 @@ class TestFeatureEliminationTransformer:
         
         assert transformer.correlation_thr == 0.9
     
-    def test_transformer_fit(self):
+    def test_transformer_fit(self, synthetic_dataset):
         """Test that transformer can be fitted."""
         from sklearn_custom_pipelines import (
             SimpleFeaturesTransformer,
             FeatureEliminationTransformer
         )
         
-        X, y = create_synthetic_dataset(n_samples=100)
+        X, y = synthetic_dataset
         
         num_features = {
             'battery_level': 50.0,
@@ -296,5 +293,122 @@ class TestDecorrelationTransformer:
         assert transformer.correlation_thr == 0.85
 
 
+class TestCalculateIV:
+    """Test calculate_iv helper function."""
+    
+    def test_calculate_iv_basic(self):
+        """Test basic IV calculation with simple data."""
+        from sklearn_custom_pipelines.utils.helpers import calculate_iv
+        
+        # Create simple test data
+        X = pd.DataFrame({
+            'feature': ['A', 'A', 'B', 'B', 'A', 'B']
+        })
+        y = pd.Series([1, 1, 0, 0, 1, 0])
+        
+        iv = calculate_iv(X, y, 'feature')
+        
+        # IV should be a float value
+        assert isinstance(iv, (float, np.floating))
+        # IV should be non-negative
+        assert iv >= 0
+    
+    def test_calculate_iv_perfect_separation(self):
+        """Test IV with perfectly separable feature."""
+        from sklearn_custom_pipelines.utils.helpers import calculate_iv
+        
+        # Perfect separation: A always has y=1, B always has y=0
+        X = pd.DataFrame({
+            'feature': ['A', 'A', 'A', 'B', 'B', 'B']
+        })
+        y = pd.Series([1, 1, 1, 0, 0, 0])
+        
+        iv = calculate_iv(X, y, 'feature')
+        
+        # IV should be high for perfect separation
+        assert iv > 0.5
+    
+    def test_calculate_iv_no_separation(self):
+        """Test IV with no predictive power."""
+        from sklearn_custom_pipelines.utils.helpers import calculate_iv
+        
+        # No separation: both categories have same distribution
+        X = pd.DataFrame({
+            'feature': ['A', 'A', 'B', 'B']
+        })
+        y = pd.Series([1, 0, 1, 0])
+        
+        iv = calculate_iv(X, y, 'feature')
+        
+        # IV should be low or zero for no separation
+        assert iv <= 0.1
+
+
+class TestCalculateWOE:
+    """Test calculate_woe helper function."""
+    
+    def test_calculate_woe_basic(self):
+        """Test basic WOE calculation."""
+        from sklearn_custom_pipelines.utils.helpers import calculate_woe
+        
+        # Create simple test data
+        X = pd.DataFrame({
+            'feature': ['A', 'A', 'B', 'B', 'A', 'B']
+        })
+        y = pd.Series([1, 1, 0, 0, 1, 0])
+        
+        woe_dict = calculate_woe(X, y, 'feature')
+        
+        # Should return a dictionary
+        assert isinstance(woe_dict, dict)
+        # Should have entries for each category
+        assert len(woe_dict) == 2
+        # Should have keys for the categories
+        assert 'A' in woe_dict
+        assert 'B' in woe_dict
+    
+    def test_calculate_woe_values(self):
+        """Test WOE values are numeric and have correct properties."""
+        from sklearn_custom_pipelines.utils.helpers import calculate_woe
+        
+        X = pd.DataFrame({
+            'feature': ['A', 'A', 'A', 'B', 'B', 'B']
+        })
+        y = pd.Series([1, 1, 1, 0, 0, 0])
+        
+        woe_dict = calculate_woe(X, y, 'feature')
+        
+        # All WOE values should be numeric
+        for key, value in woe_dict.items():
+            assert isinstance(value, (float, np.floating))
+        
+        # WOE should be positive for categories with higher event rate
+        # A has 100% events, B has 0% events
+        assert woe_dict['A'] > 0
+        assert woe_dict['B'] < 0
+    
+    def test_calculate_woe_zero_filler(self):
+        """Test zero_filler parameter prevents log(0) errors."""
+        from sklearn_custom_pipelines.utils.helpers import calculate_woe
+        
+        # Case where one category has no events
+        X = pd.DataFrame({
+            'feature': ['A', 'A', 'A', 'B']
+        })
+        y = pd.Series([1, 1, 1, 0])
+        
+        # Should not raise an error
+        woe_dict = calculate_woe(X, y, 'feature', zero_filler=0.01)
+        
+        # Should return valid dictionary
+        assert isinstance(woe_dict, dict)
+        assert len(woe_dict) == 2
+        
+        # All values should be finite
+        for value in woe_dict.values():
+            assert np.isfinite(value)
+
+
 if __name__ == '__main__':
     pytest.main([__file__, '-v'])
+

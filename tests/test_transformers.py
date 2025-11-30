@@ -624,6 +624,450 @@ class TestCustomMappingTransformer:
         assert transformer.features_mappings_dct == {}
 
 
+class TestClippingTransformer:
+    """Test ClippingTransformer class."""
+    
+    def test_transformer_initialization(self):
+        """Test that transformer can be initialized with default parameters."""
+        from sklearn_custom_pipelines import ClippingTransformer
+        
+        transformer = ClippingTransformer()
+        
+        assert transformer.num_features_pattern == r"^(num__)"
+        assert transformer.q_lower == 0.005
+        assert transformer.q_upper == 0.995
+        assert transformer.create_clipped_flag is True
+        assert transformer.num_features_lst is None
+        assert transformer.q_lower_dct is None
+        assert transformer.q_upper_dct is None
+    
+    def test_transformer_initialization_custom_params(self):
+        """Test that transformer can be initialized with custom parameters."""
+        from sklearn_custom_pipelines import ClippingTransformer
+        
+        custom_pattern = r"^(feature__)"
+        transformer = ClippingTransformer(
+            num_features_pattern=custom_pattern,
+            q_lower=0.1,
+            q_upper=0.9,
+            create_clipped_flag=False
+        )
+        
+        assert transformer.num_features_pattern == custom_pattern
+        assert transformer.q_lower == 0.1
+        assert transformer.q_upper == 0.9
+        assert transformer.create_clipped_flag is False
+    
+    def test_transformer_fit(self, synthetic_dataset):
+        """Test that transformer can be fitted on numerical features."""
+        from sklearn_custom_pipelines import (
+            SimpleFeaturesTransformer,
+            ClippingTransformer
+        )
+        
+        X, y = synthetic_dataset
+        
+        num_features = {
+            'battery_level': 50.0,
+            'gps_location_lat': 0.0
+        }
+        cat_features = {}
+        
+        simple_tf = SimpleFeaturesTransformer(num_features, cat_features)
+        X_simple = simple_tf.fit_transform(X, y)
+        
+        transformer = ClippingTransformer()
+        transformer.fit(X_simple, y)
+        
+        # Check that numerical features were identified
+        assert transformer.num_features_lst is not None
+        assert len(transformer.num_features_lst) == 2
+        
+        # Check that quantile dictionaries were computed
+        assert len(transformer.q_lower_dct) == 2
+        assert len(transformer.q_upper_dct) == 2
+        assert all(f in transformer.q_lower_dct for f in transformer.num_features_lst)
+        assert all(f in transformer.q_upper_dct for f in transformer.num_features_lst)
+    
+    def test_transformer_quantile_computation(self):
+        """Test that quantiles are correctly computed."""
+        from sklearn_custom_pipelines import ClippingTransformer
+        
+        X = pd.DataFrame({
+            'num__feature': np.arange(1, 101)  # 1 to 100
+        })
+        
+        transformer = ClippingTransformer(q_lower=0.1, q_upper=0.9)
+        transformer.fit(X)
+        
+        # For 100 values, 0.1 quantile ≈ 10.9, 0.9 quantile ≈ 90.1
+        assert 10 < transformer.q_lower_dct['num__feature'] <= 11
+        assert 90 < transformer.q_upper_dct['num__feature'] <= 91
+    
+    def test_transformer_transform(self, synthetic_dataset):
+        """Test that transformer can transform numerical features."""
+        from sklearn_custom_pipelines import (
+            SimpleFeaturesTransformer,
+            ClippingTransformer
+        )
+        
+        X, y = synthetic_dataset
+        
+        num_features = {'battery_level': 50.0}
+        cat_features = {}
+        
+        simple_tf = SimpleFeaturesTransformer(num_features, cat_features)
+        X_simple = simple_tf.fit_transform(X, y)
+        
+        transformer = ClippingTransformer()
+        transformer.fit(X_simple, y)
+        
+        X_transformed = transformer.transform(X_simple)
+        
+        # Check that output has more columns (clipping indicators added)
+        assert X_transformed.shape[0] == X_simple.shape[0]
+        assert X_transformed.shape[1] > X_simple.shape[1]
+        
+        # Check that clipping indicator columns exist
+        assert 'num__clipped_low__num__battery_level' in X_transformed.columns
+        assert 'num__clipped_high__num__battery_level' in X_transformed.columns
+    
+    def test_transformer_clipping_behavior(self):
+        """Test that clipping actually clips values."""
+        from sklearn_custom_pipelines import ClippingTransformer
+        
+        X = pd.DataFrame({
+            'num__feature': [1, 5, 10, 50, 90, 95, 99]
+        })
+        
+        transformer = ClippingTransformer(q_lower=0.1, q_upper=0.9)
+        transformer.fit(X)
+        X_transformed = transformer.transform(X)
+        
+        # Values should be clipped to quantile bounds
+        assert X_transformed['num__feature'].min() >= transformer.q_lower_dct['num__feature']
+        assert X_transformed['num__feature'].max() <= transformer.q_upper_dct['num__feature']
+    
+    def test_transformer_clipping_indicators(self):
+        """Test that clipping indicators are correctly set."""
+        from sklearn_custom_pipelines import ClippingTransformer
+        
+        X = pd.DataFrame({
+            'num__feature': [1, 2, 50, 98, 99]  # Extremes at 1, 99
+        })
+        
+        transformer = ClippingTransformer(q_lower=0.2, q_upper=0.8)
+        transformer.fit(X)
+        X_transformed = transformer.transform(X)
+        
+        # Check that indicators are binary (0 or 1)
+        assert set(X_transformed['num__clipped_low__num__feature'].unique()).issubset({0, 1})
+        assert set(X_transformed['num__clipped_high__num__feature'].unique()).issubset({0, 1})
+        
+        # Check that at least some values are marked as clipped
+        assert X_transformed['num__clipped_low__num__feature'].sum() > 0 or \
+               X_transformed['num__clipped_high__num__feature'].sum() > 0
+    
+    def test_transformer_fit_transform(self, synthetic_dataset):
+        """Test fit_transform method."""
+        from sklearn_custom_pipelines import (
+            SimpleFeaturesTransformer,
+            ClippingTransformer
+        )
+        
+        X, y = synthetic_dataset
+        
+        num_features = {'battery_level': 50.0}
+        cat_features = {}
+        
+        simple_tf = SimpleFeaturesTransformer(num_features, cat_features)
+        X_simple = simple_tf.fit_transform(X, y)
+        
+        transformer = ClippingTransformer()
+        X_transformed = transformer.fit_transform(X_simple, y)
+        
+        assert X_transformed.shape[0] == X_simple.shape[0]
+        assert 'num__clipped_low__num__battery_level' in X_transformed.columns
+    
+    def test_transformer_with_y(self, synthetic_dataset):
+        """Test that transformer properly concatenates y when provided."""
+        from sklearn_custom_pipelines import (
+            SimpleFeaturesTransformer,
+            ClippingTransformer
+        )
+        
+        X, y = synthetic_dataset
+        
+        num_features = {'battery_level': 50.0}
+        cat_features = {}
+        
+        simple_tf = SimpleFeaturesTransformer(num_features, cat_features)
+        X_simple = simple_tf.fit_transform(X, y)
+        
+        transformer = ClippingTransformer()
+        transformer.fit(X_simple, y)
+        
+        X_transformed = transformer.transform(X_simple, y)
+        
+        # Check that y is concatenated
+        assert 'y' in X_transformed.columns
+        assert X_transformed.shape[0] == X_simple.shape[0]
+        assert X_transformed['y'].equals(y)
+    
+    def test_transformer_without_y(self, synthetic_dataset):
+        """Test that transformer returns only X when y is None."""
+        from sklearn_custom_pipelines import (
+            SimpleFeaturesTransformer,
+            ClippingTransformer
+        )
+        
+        X, y = synthetic_dataset
+        
+        num_features = {'battery_level': 50.0}
+        cat_features = {}
+        
+        simple_tf = SimpleFeaturesTransformer(num_features, cat_features)
+        X_simple = simple_tf.fit_transform(X, y)
+        
+        transformer = ClippingTransformer()
+        transformer.fit(X_simple, y)
+        
+        X_transformed = transformer.transform(X_simple, y=None)
+        
+        # Check that y is not in output
+        assert 'y' not in X_transformed.columns
+    
+    def test_transformer_preserves_non_matching_columns(self):
+        """Test that transformer preserves columns that don't match pattern."""
+        from sklearn_custom_pipelines import ClippingTransformer
+        
+        X = pd.DataFrame({
+            'num__feature1': np.random.randn(100),
+            'cat__feature': np.random.choice(['A', 'B', 'C'], 100),
+            'other_feature': np.arange(100)
+        })
+        
+        transformer = ClippingTransformer()
+        transformer.fit(X)
+        X_transformed = transformer.transform(X)
+        
+        # Non-matching columns should be preserved
+        assert 'cat__feature' in X_transformed.columns
+        assert 'other_feature' in X_transformed.columns
+        assert np.array_equal(X_transformed['cat__feature'].values, X['cat__feature'].values)
+        assert np.array_equal(X_transformed['other_feature'].values, X['other_feature'].values)
+    
+    def test_transformer_multiple_features(self):
+        """Test transformer with multiple numerical features."""
+        from sklearn_custom_pipelines import ClippingTransformer
+        
+        X = pd.DataFrame({
+            'num__feature1': np.random.exponential(2, 100),
+            'num__feature2': np.random.normal(0, 1, 100),
+            'num__feature3': np.random.uniform(-5, 5, 100)
+        })
+        
+        transformer = ClippingTransformer(q_lower=0.1, q_upper=0.9)
+        transformer.fit(X)
+        X_transformed = transformer.transform(X)
+        
+        # Check that all features were clipped
+        assert len(transformer.num_features_lst) == 3
+        
+        # Check that indicator columns were created for all
+        for feature in transformer.num_features_lst:
+            assert f'num__clipped_low__{feature}' in X_transformed.columns
+            assert f'num__clipped_high__{feature}' in X_transformed.columns
+    
+    def test_transformer_custom_pattern(self):
+        """Test transformer with custom feature pattern."""
+        from sklearn_custom_pipelines import ClippingTransformer
+        
+        X = pd.DataFrame({
+            'feature__a': np.random.randn(100),
+            'feature__b': np.random.randn(100),
+            'other__c': np.random.randn(100)
+        })
+        
+        transformer = ClippingTransformer(num_features_pattern=r"^(feature__)")
+        transformer.fit(X)
+        
+        assert len(transformer.num_features_lst) == 2
+        assert 'feature__a' in transformer.num_features_lst
+        assert 'feature__b' in transformer.num_features_lst
+        assert 'other__c' not in transformer.num_features_lst
+    
+    def test_transformer_extreme_outliers(self):
+        """Test transformer handles extreme outliers correctly."""
+        from sklearn_custom_pipelines import ClippingTransformer
+        
+        X = pd.DataFrame({
+            'num__feature': [1, 2, 3, 4, 5, 1000, 2000]  # Clear outliers
+        })
+        
+        transformer = ClippingTransformer(q_lower=0.25, q_upper=0.75)
+        transformer.fit(X)
+        X_transformed = transformer.transform(X)
+        
+        # Values should not exceed bounds
+        assert X_transformed['num__feature'].max() <= transformer.q_upper_dct['num__feature']
+        
+        # Clipped high values should be flagged
+        clipped_high = X_transformed[X_transformed['num__clipped_high__num__feature'] == 1]
+        assert len(clipped_high) > 0
+    
+    def test_transformer_pipeline_compatibility(self, synthetic_dataset):
+        """Test that transformer works with sklearn Pipeline."""
+        from sklearn.pipeline import Pipeline
+        from sklearn_custom_pipelines import (
+            SimpleFeaturesTransformer,
+            ClippingTransformer
+        )
+        
+        X, y = synthetic_dataset
+        
+        num_features = {'battery_level': 50.0, 'gps_location_lat': 0.0}
+        cat_features = {}
+        
+        pipeline = Pipeline([
+            ('simple_features', SimpleFeaturesTransformer(num_features, cat_features)),
+            ('clipping', ClippingTransformer())
+        ])
+        
+        X_transformed = pipeline.fit_transform(X, y)
+        
+        assert X_transformed.shape[0] == X.shape[0]
+        assert 'num__battery_level' in X_transformed.columns
+        assert 'num__clipped_low__num__battery_level' in X_transformed.columns
+    
+    def test_transformer_handles_skewed_distributions(self):
+        """Test transformer with skewed data distributions."""
+        from sklearn_custom_pipelines import ClippingTransformer
+        
+        # Log-normal distribution (highly skewed)
+        X = pd.DataFrame({
+            'num__feature': np.random.lognormal(0, 2, 1000)
+        })
+        
+        transformer = ClippingTransformer(q_lower=0.05, q_upper=0.95)
+        transformer.fit(X)
+        X_transformed = transformer.transform(X)
+        
+        # Clipping should reduce range significantly
+        original_range = X['num__feature'].max() - X['num__feature'].min()
+        clipped_range = X_transformed['num__feature'].max() - X_transformed['num__feature'].min()
+        
+        assert clipped_range < original_range
+    
+    def test_transformer_returns_copy_not_reference(self, synthetic_dataset):
+        """Test that transformer returns a copy, not a reference."""
+        from sklearn_custom_pipelines import (
+            SimpleFeaturesTransformer,
+            ClippingTransformer
+        )
+        
+        X, y = synthetic_dataset
+        
+        num_features = {'battery_level': 50.0}
+        cat_features = {}
+        
+        simple_tf = SimpleFeaturesTransformer(num_features, cat_features)
+        X_simple = simple_tf.fit_transform(X, y)
+        
+        transformer = ClippingTransformer()
+        transformer.fit(X_simple, y)
+        
+        X_original = X_simple.copy()
+        X_transformed = transformer.transform(X_simple)
+        
+        # Modifying transformed should not affect original
+        X_transformed.iloc[0, 0] = 999
+        assert X_simple.iloc[0, 0] != 999
+    
+    def test_transformer_without_clipped_flag(self, synthetic_dataset):
+        """Test transformer with create_clipped_flag=False."""
+        from sklearn_custom_pipelines import (
+            SimpleFeaturesTransformer,
+            ClippingTransformer
+        )
+        
+        X, y = synthetic_dataset
+        
+        num_features = {'battery_level': 50.0}
+        cat_features = {}
+        
+        simple_tf = SimpleFeaturesTransformer(num_features, cat_features)
+        X_simple = simple_tf.fit_transform(X, y)
+        
+        transformer = ClippingTransformer(create_clipped_flag=False)
+        transformer.fit(X_simple, y)
+        
+        X_transformed = transformer.transform(X_simple)
+        
+        # Check that no clipping indicator columns were created
+        assert 'num__clipped_low__num__battery_level' not in X_transformed.columns
+        assert 'num__clipped_high__num__battery_level' not in X_transformed.columns
+        
+        # But original columns should still be clipped
+        assert X_transformed['num__battery_level'].min() >= transformer.q_lower_dct['num__battery_level']
+        assert X_transformed['num__battery_level'].max() <= transformer.q_upper_dct['num__battery_level']
+    
+    def test_transformer_with_clipped_flag_true(self, synthetic_dataset):
+        """Test transformer with create_clipped_flag=True (default behavior)."""
+        from sklearn_custom_pipelines import (
+            SimpleFeaturesTransformer,
+            ClippingTransformer
+        )
+        
+        X, y = synthetic_dataset
+        
+        num_features = {'battery_level': 50.0}
+        cat_features = {}
+        
+        simple_tf = SimpleFeaturesTransformer(num_features, cat_features)
+        X_simple = simple_tf.fit_transform(X, y)
+        
+        transformer = ClippingTransformer(create_clipped_flag=True)
+        transformer.fit(X_simple, y)
+        
+        X_transformed = transformer.transform(X_simple)
+        
+        # Check that clipping indicator columns WERE created
+        assert 'num__clipped_low__num__battery_level' in X_transformed.columns
+        assert 'num__clipped_high__num__battery_level' in X_transformed.columns
+    
+    def test_transformer_flag_comparison(self, synthetic_dataset):
+        """Test that with/without flag produces expected differences."""
+        from sklearn_custom_pipelines import (
+            SimpleFeaturesTransformer,
+            ClippingTransformer
+        )
+        
+        X, y = synthetic_dataset
+        
+        num_features = {'battery_level': 50.0}
+        cat_features = {}
+        
+        simple_tf = SimpleFeaturesTransformer(num_features, cat_features)
+        X_simple = simple_tf.fit_transform(X, y)
+        
+        # Transform with flag
+        tf_with_flag = ClippingTransformer(create_clipped_flag=True)
+        tf_with_flag.fit(X_simple, y)
+        X_with_flag = tf_with_flag.transform(X_simple)
+        
+        # Transform without flag
+        tf_without_flag = ClippingTransformer(create_clipped_flag=False)
+        tf_without_flag.fit(X_simple, y)
+        X_without_flag = tf_without_flag.transform(X_simple)
+        
+        # With flag should have more columns
+        assert X_with_flag.shape[1] > X_without_flag.shape[1]
+        
+        # Clipped values should be the same in both
+        assert np.allclose(X_with_flag['num__battery_level'], X_without_flag['num__battery_level'])
+
+
 class TestPowerNormTransformer:
     """Test PowerNormTransformer class."""
     

@@ -475,3 +475,216 @@ class CustomPCATransformer(BaseEstimator, TransformerMixin):
             return pd.concat([X_combined, y], axis=1)
         else:
             return X_combined
+        
+
+class ClippingTransformer(BaseEstimator, TransformerMixin):
+    """
+    Clip numerical features to specified quantile bounds and create binary clipping indicators.
+    
+    This transformer handles outliers by clipping numerical features to lower and upper quantile
+    values learned during training. Additionally, it creates binary indicator features that mark
+    which values were clipped, preserving information about outliers.
+    
+    Clipping is useful for:
+    - Handling extreme outliers that could skew model performance
+    - Reducing the impact of heavy-tailed distributions
+    - Stabilizing model predictions on new data with potential outliers
+    - Creating interpretable outlier indicators for the model
+    
+    Parameters
+    ----------
+    num_features_pattern : str, default=r"^(num__)"
+        Regex pattern to identify numerical features to clip.
+        By default, matches features starting with "num__" prefix.
+        Example: r"^(num__)" matches "num__age", "num__salary", etc.
+    
+    q_lower : float, default=0.005
+        Lower quantile threshold for clipping (0.005 = 0.5th percentile).
+        Values below this quantile are clipped to the quantile value.
+        Must be between 0 and 1.
+    
+    q_upper : float, default=0.995
+        Upper quantile threshold for clipping (0.995 = 99.5th percentile).
+        Values above this quantile are clipped to the quantile value.
+        Must be between 0 and 1.
+    
+    create_clipped_flag : bool, default=True
+        Whether to create binary indicator columns for clipped values.
+        If True, for each clipped feature, two new columns are created:
+        - 'num__clipped_low__<feature>': 1 if value was clipped at lower bound
+        - 'num__clipped_high__<feature>': 1 if value was clipped at upper bound
+        If False, only the clipped values are returned without indicators.
+    
+    Attributes
+    ----------
+    num_features_lst : list
+        List of numerical feature column names identified during fit()
+    
+    q_lower_dct : dict
+        Dictionary mapping feature names to their lower quantile values computed during fit()
+    
+    q_upper_dct : dict
+        Dictionary mapping feature names to their upper quantile values computed during fit()
+    
+    Examples
+    --------
+    >>> import pandas as pd
+    >>> import numpy as np
+    >>> from sklearn_custom_pipelines import ClippingTransformer
+    >>> 
+    >>> # Create sample data with outliers
+    >>> X = pd.DataFrame({
+    ...     'num__age': [20, 25, 30, 150, 200, 35],  # 150, 200 are outliers
+    ...     'num__salary': [30000, 50000, 45000, 40000, 1000000, 55000]  # 1000000 is outlier
+    ... })
+    >>> y = pd.Series([0, 1, 0, 1, 1, 0])
+    >>> 
+    >>> # Initialize and fit the transformer
+    >>> transformer = ClippingTransformer(q_lower=0.1, q_upper=0.9)
+    >>> transformer.fit(X, y)
+    >>> 
+    >>> # Transform the data
+    >>> X_transformed = transformer.transform(X)
+    >>> print(X_transformed.head())
+    
+    Notes
+    -----
+    - Only features matching the pattern are clipped
+    - If create_clipped_flag is True, for each clipped feature, two binary indicators are created:
+      - 'num__clipped_low__<feature>': 1 if value was clipped at lower bound
+      - 'num__clipped_high__<feature>': 1 if value was clipped at upper bound
+    - If create_clipped_flag is False, only clipped values are returned
+    - Clipping bounds are computed during fit() and applied during transform()
+    - Non-matching features are passed through unchanged
+    - The transformer is compatible with sklearn Pipeline
+    - If y is provided to transform(), it is concatenated to the output
+    
+    See Also
+    --------
+    PowerNormTransformer : For power-based normalization of features
+    """
+    
+    def __init__(
+        self,
+        num_features_pattern=r"^(num__)",
+        q_lower=0.005,
+        q_upper=0.995,
+        create_clipped_flag=True
+    ):
+        """
+        Initialize ClippingTransformer.
+        
+        Parameters
+        ----------
+        num_features_pattern : str, default=r"^(num__)"
+            Regex pattern for identifying numerical features to clip
+        q_lower : float, default=0.005
+            Lower quantile threshold (must be between 0 and 1)
+        q_upper : float, default=0.995
+            Upper quantile threshold (must be between 0 and 1)
+        create_clipped_flag : bool, default=True
+            Whether to create binary indicator columns showing which values were clipped.
+            If True, creates 'num__clipped_low__<feature>' and 'num__clipped_high__<feature>' columns.
+            If False, only returns clipped feature values without indicators.
+        """
+        self.num_features_pattern = num_features_pattern
+        self.q_lower = q_lower
+        self.q_upper = q_upper
+        self.create_clipped_flag = create_clipped_flag
+        self.num_features_lst = None
+        self.q_lower_dct = None
+        self.q_upper_dct = None
+
+    def fit(self, X, y=None):
+        """
+        Fit the ClippingTransformer to the data.
+        
+        Identifies numerical features matching the pattern and computes the lower and upper
+        quantile values for each feature that will be used for clipping.
+        
+        Parameters
+        ----------
+        X : pd.DataFrame
+            Input features dataframe. Must contain at least one column matching
+            the num_features_pattern
+        
+        y : pd.Series or None, default=None
+            Target variable. Not used for fitting the transformer, but included
+            for sklearn Pipeline compatibility
+        
+        Returns
+        -------
+        self : ClippingTransformer
+            Returns self for method chaining
+        """
+        X = X.copy()
+        
+        self.num_features_lst = list(filter(lambda x: re.match(self.num_features_pattern, x), X.columns))
+        self.q_lower_dct = {}
+        self.q_upper_dct = {}
+
+        for f in self.num_features_lst:
+            self.q_lower_dct[f] = X[f].quantile(self.q_lower)
+            self.q_upper_dct[f] = X[f].quantile(self.q_upper)
+
+        logger.info(f"Clipping - fit done.")
+        
+        return self
+
+    def transform(self, X, y=None):
+        """
+        Apply clipping and optionally create binary indicators for clipped values.
+        
+        Clips features to the quantile bounds learned during fit(). If create_clipped_flag
+        is True, creates binary indicators showing which values were clipped.
+        Non-matching features are passed through unchanged.
+        
+        Parameters
+        ----------
+        X : pd.DataFrame
+            Input features dataframe to transform. Must have the same columns
+            (or at least the same numerical features) as used during fit()
+        
+        y : pd.Series or None, default=None
+            Target variable. If provided, it will be concatenated to the output
+        
+        Returns
+        -------
+        X_transformed : pd.DataFrame
+            Dataframe with clipped numerical features and optional binary indicator columns.
+            Original feature values are replaced with clipped values.
+            If create_clipped_flag is True, for each clipped feature 'num__feature',
+            two new columns are added:
+            - 'num__clipped_low__feature': Binary flag (1 if clipped at lower bound)
+            - 'num__clipped_high__feature': Binary flag (1 if clipped at upper bound)
+            If y is provided, it is appended as an additional column.
+        
+        Notes
+        -----
+        - Original feature values are replaced with clipped values
+        - Values below lower quantile are clipped to the lower quantile value
+        - Values above upper quantile are clipped to the upper quantile value
+        - Binary indicators help preserve information about outliers for the model
+        - If create_clipped_flag is False, no indicator columns are created
+        """
+        X = X.copy()
+        
+        for f in self.num_features_lst:
+            
+            X[f] = X[f].clip(
+                lower=self.q_lower_dct[f], 
+                upper=self.q_upper_dct[f]
+            )
+            
+            if self.create_clipped_flag:
+                X[NUM + 'clipped_low__' + f] = 0
+                X[NUM + 'clipped_high__' + f] = 0
+                X.loc[X[f] <= self.q_lower_dct[f],  NUM + 'clipped_low__' + f] = 1
+                X.loc[X[f] >= self.q_upper_dct[f],  NUM + 'clipped_high__' + f] = 1
+
+        logger.info(f"Clipping - transform done.")
+
+        if y is not None:
+            return pd.concat([X, y], axis=1)
+        else:
+            return X

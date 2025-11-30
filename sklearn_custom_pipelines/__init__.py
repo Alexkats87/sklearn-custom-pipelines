@@ -16,6 +16,7 @@ try:
         DecorrelationTransformer,
         PairedFeaturesTransformer,
         CustomPCATransformer,
+        ClippingTransformer,
     )
 
     from sklearn_custom_pipelines.core.encoders import (
@@ -45,6 +46,7 @@ __all__ = [
     "PairedFeaturesTransformer",
     "PairedBinaryFeaturesTransformer",
     "CustomPCATransformer",
+    "ClippingTransformer",
     # Encoders
     "WoeEncoderTransformer",
     "RareCategoriesTransformer",

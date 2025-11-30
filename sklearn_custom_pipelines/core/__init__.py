@@ -6,6 +6,7 @@ from sklearn_custom_pipelines.core.featurizers import (
     DecorrelationTransformer,
     PairedFeaturesTransformer,
     CustomPCATransformer,
+    ClippingTransformer,
 )
 
 from sklearn_custom_pipelines.core.encoders import (
@@ -30,6 +31,7 @@ __all__ = [
     "PairedFeaturesTransformer",
     "PairedBinaryFeaturesTransformer",
     "CustomPCATransformer",
+    "ClippingTransformer",
     "WoeEncoderTransformer",
     "RareCategoriesTransformer",
     "BinningNumericalTransformer",

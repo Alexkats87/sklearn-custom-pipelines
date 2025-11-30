@@ -267,23 +267,80 @@ class CustomMappingTransformer(BaseEstimator, TransformerMixin):
     """
     Apply custom mappings to specified features.
 
-    Uses predefined custom mappings from custom_mappings module.
+    This transformer applies user-defined mappings to transform feature values
+    based on a provided dictionary of mappings. Each feature can have a custom
+    transformation rule that maps existing values to new values. Supports both
+    one-to-one and many-to-one mappings via frozenset keys.
+
+    Parameters
+    ----------
+    features_mappings_dct : dict
+        Dictionary where keys are feature names and values are mapping definitions.
+        Each mapping can be a dict or a list defining the transformation for that feature.
+        Many-to-one mappings use frozenset keys to group multiple source values into
+        a single target value.
+
+    Examples
+    --------
+    Many-to-one mapping (group multiple values into categories):
+
+    >>> from sklearn_custom_pipelines.utils.const import MISSING
+    >>> education_map = {
+    ...     frozenset({'Graduate', 'HND'}): 'Graduate',
+    ...     frozenset({'Post Graduate'}): 'Post Graduate',
+    ...     frozenset({'Primary', 'Secondary'}): 'Primary and Secondary',
+    ...     frozenset({MISSING}): MISSING,
+    ... }
+    >>> mappings = {'education_status': education_map}
+    >>> transformer = CustomMappingTransformer(features_mappings_dct=mappings)
+    >>> transformer.fit(X, y)
+    >>> X_transformed = transformer.transform(X)
+
+    Notes
+    -----
+    - Unmapped values are filled with the MISSING constant
+    - The transformer is a no-op during fit (stateless after initialization)
+    - Transform is applied only to columns present in both the input and mappings dict
+    - Many-to-one mappings use frozenset keys to map multiple input values to a single output
     """
 
-    def __init__(self):
-        pass
+    def __init__(self, features_mappings_dct=None):
+        self.features_mappings_dct = features_mappings_dct if features_mappings_dct is not None else {}
 
     def fit(self, X, y=None):
         """Fit the transformer (no-op for this transformer)."""
+        if self.features_mappings_dct:
+            logger.debug(f"CustomMapping - fit called with {len(self.features_mappings_dct)} mappings")
         return self
 
     def transform(self, X, y=None):
         """Apply custom mappings to features."""
         X = X.copy()
 
-        for f, m in features_custom_mappings_dct.items():
+        if not self.features_mappings_dct:
+            logger.debug("CustomMapping - no mappings defined, skipping")
+            if y is not None:
+                return pd.concat([X, y], axis=1)
+            else:
+                return X
+
+        for f, m in self.features_mappings_dct.items():
             if f in X.columns:
-                X[f] = X[f].map(get_values_map(m)).fillna(MISSING)
+                values_map = get_values_map(m)
+                
+                # Count unmapped values before filling
+                unmapped_count = X[f].map(values_map).isna().sum()
+                
+                # Apply mapping
+                X[f] = X[f].map(values_map).fillna(MISSING)
+                
+                # Log results
+                if unmapped_count > 0:
+                    logger.info(f"CustomMapping - {f}: applied mapping, {unmapped_count} unmapped values filled with {MISSING}")
+                else:
+                    logger.info(f"CustomMapping - {f}: applied mapping successfully")
+            else:
+                logger.warning(f"CustomMapping - {f}: column not found in data, skipping")
 
         if y is not None:
             return pd.concat([X, y], axis=1)

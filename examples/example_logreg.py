@@ -24,11 +24,12 @@ from sklearn_custom_pipelines import (
     BinningNumericalTransformer,
     BinningCategoriesTransformer,
     WoeEncoderTransformer,
-        PairedFeaturesTransformer,
-        PairedBinaryFeaturesTransformer,
+    CustomMappingTransformer,
+    PairedFeaturesTransformer,
+    PairedBinaryFeaturesTransformer,
     CustomLogisticRegressionClassifier,
 )
-from sklearn_custom_pipelines.utils.const import NUM, BIN, WOE, MISSING
+from sklearn_custom_pipelines.utils.const import NUM, BIN, WOE, MISSING, CAT
 
 logging.basicConfig(format='%(asctime)s - %(levelname)s - %(message)s', level=logging.INFO)
 
@@ -91,6 +92,19 @@ def create_synthetic_data(n_samples=5000, random_state=42):
     return df
 
 
+# Define many-to-one mapping for activity consolidation
+def get_activity_mappings():
+    """Create many-to-one mappings for activity levels."""
+    activity_map = {
+        frozenset({'low'}): 'low_activity',
+        frozenset({'medium', 'high'}): 'high_activity',
+        frozenset({MISSING}): MISSING,
+    }
+    return {
+        CAT + 'recent_activity': activity_map
+    }
+
+
 if __name__ == "__main__":
     
     # Create synthetic data
@@ -121,12 +135,16 @@ if __name__ == "__main__":
         "os_version": MISSING,
         "telco_carrier": MISSING,
         "network_type": MISSING,
+        "recent_activity": MISSING,
     }
     
     # Create sklearn pipeline
     model_ppl = Pipeline(steps=[
         ("simple_features_tr", SimpleFeaturesTransformer(
             num_features_missings, cat_features_missings
+        )),
+        ("custom_mapping_tr", CustomMappingTransformer(
+            features_mappings_dct=get_activity_mappings()
         )),
         ("feature_elimination_tr", FeatureEliminationTransformer()),
         ("rare_encoder_tr", RareCategoriesTransformer()),

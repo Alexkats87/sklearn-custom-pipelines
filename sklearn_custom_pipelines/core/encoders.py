@@ -2,14 +2,12 @@
 
 import re
 import pandas as pd
-import numpy as np
 import logging
 
 from sklearn.base import BaseEstimator, TransformerMixin
-from feature_engine.encoding.rare_label import RareLabelEncoder
 
 from sklearn_custom_pipelines.utils.const import (
-    CAT, NUM, BIN, WOE, MISSING, OTHER, TARGET
+    BIN, WOE, MISSING, OTHER, TARGET
 )
 from sklearn_custom_pipelines.utils.helpers import (
     get_optbin_info_cat,

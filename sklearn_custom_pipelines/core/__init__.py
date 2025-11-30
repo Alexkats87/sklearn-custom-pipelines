@@ -15,6 +15,7 @@ from sklearn_custom_pipelines.core.encoders import (
     BinningCategoriesTransformer,
     PairedBinaryFeaturesTransformer,
     CustomMappingTransformer,
+    PowerNormTransformer
 )
 
 from sklearn_custom_pipelines.core.models import (
@@ -36,4 +37,5 @@ __all__ = [
     "CustomMappingTransformer",
     "CustomLogisticRegressionClassifier",
     "CustomCatBoostClassifier",
+    "PowerNormTransformer",
 ]

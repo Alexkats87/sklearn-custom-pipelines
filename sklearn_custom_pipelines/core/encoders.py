@@ -2,12 +2,12 @@
 
 import re
 import pandas as pd
-import numpy as np
 import logging
 import operator
 
-from itertools import combinations, groupby
+from itertools import combinations
 from sklearn.base import BaseEstimator, TransformerMixin
+from sklearn.preprocessing import PowerTransformer
 
 from sklearn_custom_pipelines.utils.const import (
     BIN, WOE, MISSING, OTHER, TARGET, SEP
@@ -19,7 +19,7 @@ from sklearn_custom_pipelines.utils.helpers import (
     calculate_woe,
     calculate_iv
 )
-from sklearn_custom_pipelines.utils.custom_mappings import features_custom_mappings_dct
+
 
 logger = logging.getLogger(__name__)
 
@@ -310,7 +310,7 @@ class CustomMappingTransformer(BaseEstimator, TransformerMixin):
     def fit(self, X, y=None):
         """Fit the transformer (no-op for this transformer)."""
         if self.features_mappings_dct:
-            logger.debug(f"CustomMapping - fit called with {len(self.features_mappings_dct)} mappings")
+            logger.info(f"CustomMapping - {len(self.features_mappings_dct)} mappings will be applied")
         return self
 
     def transform(self, X, y=None):
@@ -336,11 +336,13 @@ class CustomMappingTransformer(BaseEstimator, TransformerMixin):
                 
                 # Log results
                 if unmapped_count > 0:
-                    logger.info(f"CustomMapping - {f}: applied mapping, {unmapped_count} unmapped values filled with {MISSING}")
+                    logger.debug(f"CustomMapping - {f}: applied mapping, {unmapped_count} unmapped values filled with {MISSING}")
                 else:
-                    logger.info(f"CustomMapping - {f}: applied mapping successfully")
+                    logger.debug(f"CustomMapping - {f}: applied mapping successfully")
             else:
-                logger.warning(f"CustomMapping - {f}: column not found in data, skipping")
+                logger.debug(f"CustomMapping - {f}: column not found in data, skipping")
+
+        logger.info(f"CustomMapping - applied")
 
         if y is not None:
             return pd.concat([X, y], axis=1)
@@ -491,9 +493,6 @@ class PairedFeaturesTransformer(BaseEstimator, TransformerMixin):
             list(combinations(features_to_pair_lst, 2))
         )
 
-        logger.info(f"Paired features fit: {len(features_to_pair_lst)} features to pair.")
-        logger.info(f"Paired features fit: {len(all_features_pairs_lst)} candidates for paired features to add.")
-
         cnt = 0
 
         self.features_pairs_lst = []
@@ -616,9 +615,6 @@ class PairedBinaryFeaturesTransformer(BaseEstimator, TransformerMixin):
         all_paired_features_lst = (
             list(combinations(self.bin_features, 2))
         )
-        
-        logger.info(f"Paired bin features fit: {len(self.bin_features)} features to pair.")
-        logger.info(f"Paired bin features fit: {len(all_paired_features_lst)} candidates for paired features to add.")
 
         # Total added features count
         cnt = 0
@@ -637,7 +633,7 @@ class PairedBinaryFeaturesTransformer(BaseEstimator, TransformerMixin):
     
                 if self.iv_min < iv < self.iv_max:
                     self.features_pairs_lst.append((p, op))
-                    logger.info(f"Paired features fit: {f_paired_name} to add with IV={iv:0.3}")
+                    logger.debug(f"Paired features fit: {f_paired_name} to add with IV={iv:0.3}")
                 else:
                     del X[f_paired_name]
     
@@ -663,6 +659,179 @@ class PairedBinaryFeaturesTransformer(BaseEstimator, TransformerMixin):
 
         logger.info(f"Paired features: {cnt} - added.")
         
+        if y is not None:
+            return pd.concat([X, y], axis=1)
+        else:
+            return X
+        
+class PowerNormTransformer(BaseEstimator, TransformerMixin):
+    """
+    Apply power transformations to numerical features for normalization.
+    
+    Applies power transformations (Yeo-Johnson or Box-Cox) to numerical features
+    to make them more Gaussian-like and improve model performance. The transformer
+    automatically identifies numerical features based on a naming pattern and
+    applies the specified power transformation method.
+    
+    This transformer is particularly useful for:
+    - Normalizing skewed distributions
+    - Stabilizing variance across different feature ranges
+    - Improving model performance for algorithms sensitive to feature distributions
+    - Preparing data for statistical tests that assume normality
+    
+    Parameters
+    ----------
+    num_features_pattern : str, default=r"^(num__)"
+        Regex pattern to identify numerical features to transform.
+        By default, matches features starting with "num__" prefix.
+        Example: r"^(num__)" matches "num__age", "num__salary", etc.
+    
+    method : {'yeo-johnson', 'box-cox'}, default='yeo-johnson'
+        Power transformation method to use:
+        - 'yeo-johnson': Works with any real-valued input, including zero and negative values
+        - 'box-cox': Works only with strictly positive values
+    
+    Attributes
+    ----------
+    num_features_lst : list
+        List of numerical feature column names identified during fit()
+    
+    power_tranformer : PowerTransformer
+        Fitted sklearn PowerTransformer instance used for transformation
+    
+    Examples
+    --------
+    >>> import pandas as pd
+    >>> import numpy as np
+    >>> from sklearn_custom_pipelines import PowerNormTransformer
+    >>> 
+    >>> # Create sample data with skewed distributions
+    >>> X = pd.DataFrame({
+    ...     'num__age': np.random.exponential(2, 100),
+    ...     'num__income': np.random.exponential(5, 100),
+    ...     'cat__city': ['NYC', 'LA', 'CHI'] * 33 + ['NYC']
+    ... })
+    >>> y = pd.Series(np.random.randint(0, 2, 100))
+    >>> 
+    >>> # Initialize and fit the transformer
+    >>> transformer = PowerNormTransformer(method='yeo-johnson')
+    >>> transformer.fit(X, y)
+    >>> 
+    >>> # Transform the data
+    >>> X_transformed = transformer.transform(X)
+    >>> print(X_transformed.head())
+    
+    Notes
+    -----
+    - Only features matching the pattern are transformed
+    - Non-matching features are passed through unchanged
+    - The transformer is compatible with sklearn Pipeline
+    - If y is provided to transform(), it is concatenated to the output
+    
+    See Also
+    --------
+    sklearn.preprocessing.PowerTransformer : The underlying sklearn transformer
+    """
+
+    def __init__(
+        self,
+        num_features_pattern=r"^(num__)",
+        method='yeo-johnson'
+    ):
+        """
+        Initialize PowerNormTransformer.
+        
+        Parameters
+        ----------
+        num_features_pattern : str, default=r"^(num__)"
+            Regex pattern for identifying numerical features
+        method : {'yeo-johnson', 'box-cox'}, default='yeo-johnson'
+            Power transformation method
+        """
+        self.num_features_pattern = num_features_pattern
+        self.method = method
+        self.num_features_lst = None
+        self.power_tranformer = None
+
+    def fit(self, X, y=None):
+        """
+        Fit the PowerNormTransformer to the data.
+        
+        Identifies numerical features matching the pattern and fits a PowerTransformer
+        to learn the optimal power transformation parameters from the training data.
+        If no numerical features are found, the transformer is initialized but no fitting
+        is performed on the PowerTransformer.
+        
+        Parameters
+        ----------
+        X : pd.DataFrame
+            Input features dataframe. Can contain any columns; if no columns match
+            the num_features_pattern, fitting is skipped and data is passed through unchanged.
+        
+        y : pd.Series or None, default=None
+            Target variable. Not used for fitting the transformer, but included
+            for sklearn Pipeline compatibility
+        
+        Returns
+        -------
+        self : PowerNormTransformer
+            Returns self for method chaining
+        """
+        X = X.copy()
+        
+        self.num_features_lst = list(filter(lambda x: re.match(self.num_features_pattern, x), X.columns))
+        
+        # Only fit PowerTransformer if there are numerical features to transform
+        if len(self.num_features_lst) > 0:
+            self.power_tranformer = PowerTransformer(method=self.method).fit(X[self.num_features_lst])
+        else:
+            self.power_tranformer = None
+
+        logger.info(f"Power Transformer - fit done.")
+        
+        return self
+
+    def transform(self, X, y=None):
+        """
+        Apply power transformation to numerical features.
+        
+        Applies the fitted power transformation to features identified during fit().
+        Non-matching features are passed through unchanged. If no numerical features
+        were found during fit(), returns the data unchanged.
+        
+        Parameters
+        ----------
+        X : pd.DataFrame
+            Input features dataframe to transform. Must have the same columns
+            (or at least the same numerical features) as used during fit()
+        
+        y : pd.Series or None, default=None
+            Target variable. If provided, it will be concatenated to the output
+        
+        Returns
+        -------
+        X_transformed : pd.DataFrame
+            Dataframe with transformed numerical features. All columns from input
+            are preserved, with numerical features replaced by their transformed
+            values. If y is provided, it is appended as an additional column.
+            If no numerical features were found, returns X unchanged.
+        
+        Notes
+        -----
+        - Columns matching num_features_lst are replaced with transformed values
+        - Other columns are preserved as-is
+        - If no numerical features exist, data passes through unchanged
+        - If y is None, only features are returned
+        - If y is not None, y is concatenated as an additional column
+        """
+        X = X.copy()
+        
+        # Only transform if numerical features were found during fit
+        if len(self.num_features_lst) > 0 and self.power_tranformer is not None:
+            X[self.num_features_lst] = self.power_tranformer.transform(X[self.num_features_lst])
+
+        logger.info(f"Power Transformer - transform done.")
+
         if y is not None:
             return pd.concat([X, y], axis=1)
         else:

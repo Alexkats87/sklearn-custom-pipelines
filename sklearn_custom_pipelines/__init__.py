@@ -25,6 +25,7 @@ try:
         BinningCategoriesTransformer,
         PairedBinaryFeaturesTransformer,
         CustomMappingTransformer,
+        PowerNormTransformer,
     )
 
     from sklearn_custom_pipelines.core.models import (
@@ -50,6 +51,7 @@ __all__ = [
     "BinningNumericalTransformer",
     "BinningCategoriesTransformer",
     "CustomMappingTransformer",
+    "PowerNormTransformer",
     # Models
     "CustomLogisticRegressionClassifier",
     "CustomCatBoostClassifier",

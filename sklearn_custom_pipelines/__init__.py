@@ -23,8 +23,8 @@ try:
         RareCategoriesTransformer,
         BinningNumericalTransformer,
         BinningCategoriesTransformer,
+        PairedBinaryFeaturesTransformer,
         CustomMappingTransformer,
-        CustomRareCategoriesTransformer,
     )
 
     from sklearn_custom_pipelines.core.models import (
@@ -42,6 +42,7 @@ __all__ = [
     "FeatureEliminationTransformer",
     "DecorrelationTransformer",
     "PairedFeaturesTransformer",
+    "PairedBinaryFeaturesTransformer",
     "CustomPCATransformer",
     # Encoders
     "WoeEncoderTransformer",
@@ -49,7 +50,6 @@ __all__ = [
     "BinningNumericalTransformer",
     "BinningCategoriesTransformer",
     "CustomMappingTransformer",
-    "CustomRareCategoriesTransformer",
     # Models
     "CustomLogisticRegressionClassifier",
     "CustomCatBoostClassifier",

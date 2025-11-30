@@ -237,56 +237,6 @@ class CustomMappingTransformer(BaseEstimator, TransformerMixin):
             return X
 
 
-class CustomRareCategoriesTransformer(BaseEstimator, TransformerMixin):
-    
-    def __init__(self, tol=0.001, n_categories=4, fill_na=MISSING, replace_with=OTHER):
-        self.tol = tol
-        self.n_categories = n_categories
-        self.cat_features_lst = None
-        self.fill_na = fill_na
-        self.replace_with = replace_with
-
-    def fit(self, X, y=None):
-
-        self.cat_features_lst = list(filter(lambda x: re.match(r"^(cat__)", x), X.columns))
-        self.encoder_dict_ = {}
-
-        for f in self.cat_features_lst:
-            if len(X[f].unique()) > self.n_categories:
-
-                logger.debug(f"Rare categories encoder - process {f} with {len(X[f].unique())} unique categories.")
-
-                # if the variable has more than the indicated number of categories
-                # the encoder will learn the most frequent categories
-                t = X[f].fillna(self.fill_na).astype(str).value_counts(normalize=True)
-
-                # non-rare labels:
-                freq_idx = t[t >= self.tol].index
-                self.encoder_dict_[f] = list(freq_idx)
-
-            else:
-                self.encoder_dict_[f] = list(X[f].unique())
-        
-        logger.info(f"Rare categories encoder - fit done")
-        
-        return self
-
-    def transform(self, X, y=None):
-        X = X.copy()
-
-        for f in self.cat_features_lst:
-            if f in X.columns:
-                X[f] = X[f].fillna(self.fill_na).astype(str)
-                X.loc[~X[f].isin(self.encoder_dict_[f]), f] = (self.replace_with)
-
-        logger.info(f"Rare categories encoder - transform done")
-                
-        if y is not None:
-            return pd.concat([X, y], axis=1)
-        else:
-            return X
-
-
 class PairedFeaturesTransformer(BaseEstimator, TransformerMixin):
     
     def __init__(self, features_pattern=r".*__bin$", max_cardinality=6, iv_min=0.01, iv_max=0.5):

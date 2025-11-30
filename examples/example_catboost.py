@@ -22,9 +22,11 @@ from sklearn_custom_pipelines import (
     FeatureEliminationTransformer,
     DecorrelationTransformer,
     RareCategoriesTransformer,
+    CustomMappingTransformer,
+    PairedBinaryFeaturesTransformer,
     CustomCatBoostClassifier,
 )
-from sklearn_custom_pipelines.utils.const import NUM, MISSING
+from sklearn_custom_pipelines.utils.const import NUM, MISSING, CAT
 
 logging.basicConfig(format='%(asctime)s - %(levelname)s - %(message)s', level=logging.INFO)
 
@@ -57,10 +59,27 @@ def create_synthetic_data(n_samples=5000, random_state=0):
         'os_version': np.random.choice(['Android 10', 'Android 11', 'iOS 14', None], n_samples),
         'telco_carrier': np.random.choice(['Carrier1', 'Carrier2', 'Carrier3', None], n_samples),
         'network_type': np.random.choice(['WiFi', '4G', '5G', None], n_samples),
+        'recent_activity': np.random.choice(['low', 'medium', 'high'], n_samples, p=[0.35, 0.45, 0.2]),
+        'cat__flag__a': np.random.binomial(1, 0.15, n_samples).astype(str),
+        'cat__flag__b': np.random.binomial(1, 0.25, n_samples).astype(str),
+        'cat__flag__c': np.random.binomial(1, 0.10, n_samples).astype(str),
         'y': y.astype(int)
     }
     
     return pd.DataFrame(data)
+
+
+# Define many-to-one mapping for activity consolidation
+def get_activity_mappings():
+    """Create many-to-one mappings for activity levels."""
+    activity_map = {
+        frozenset({'low'}): 'low_activity',
+        frozenset({'medium', 'high'}): 'high_activity',
+        frozenset({MISSING}): MISSING,
+    }
+    return {
+        CAT + 'recent_activity': activity_map
+    }
 
 
 if __name__ == "__main__":
@@ -91,6 +110,7 @@ if __name__ == "__main__":
         "os_version": MISSING,
         "telco_carrier": MISSING,
         "network_type": MISSING,
+        "recent_activity": MISSING,
     }
     
     # Create sklearn pipeline
@@ -98,9 +118,13 @@ if __name__ == "__main__":
         ("simple_features_tr", SimpleFeaturesTransformer(
             num_features_missings, cat_features_missings
         )),
+        ("custom_mapping_tr", CustomMappingTransformer(
+            features_mappings_dct=get_activity_mappings()
+        )),
         ("feature_elimination_tr", FeatureEliminationTransformer()),
         ("decorr_tr", DecorrelationTransformer(features_pattern=fr"^{NUM}.*")),
         ("rare_encoder_tr", RareCategoriesTransformer()),
+        ("paired_bin_tr", PairedBinaryFeaturesTransformer(features_pattern=r"cat__flag__")),
         ("feature_elimination_tr2", FeatureEliminationTransformer()),
         ("model_tr", CustomCatBoostClassifier(verbose=False, iterations=50)),
     ])
@@ -115,11 +139,13 @@ if __name__ == "__main__":
         )
     )
     
+    # Setup logger
+    logger = logging.getLogger(__name__)
+    
     # Make predictions
     y_train_pred = model_ppl.predict(X_train)
     y_test_pred = model_ppl.predict(X_test)
     
-    print(f"\nROC_AUC train: {roc_auc_score(y_train, y_train_pred[:, 1]):.4f}")
-    print(f"ROC_AUC test:  {roc_auc_score(y_test, y_test_pred[:, 1]):.4f}")
-    
-    print(f"\nPipeline trained successfully!")
+    logger.info(f"ROC_AUC train: {roc_auc_score(y_train, y_train_pred[:, 1]):.4f}")
+    logger.info(f"ROC_AUC test:  {roc_auc_score(y_test, y_test_pred[:, 1]):.4f}")
+    logger.info(f"Pipeline trained successfully!")

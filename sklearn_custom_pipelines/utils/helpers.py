@@ -184,3 +184,61 @@ def calculate_woe(X, y, feature, zero_filler=0.01):
         woe_dict[category] = np.log(pct_events / pct_non_events)
     
     return woe_dict
+
+
+def calculate_iv(X, y, feature):
+    """
+    Calculate the Information Value (IV) for a feature.
+    
+    Information Value measures the strength of a feature's relationship with
+    the target variable. Higher IV indicates stronger predictive power.
+    
+    Parameters
+    ----------
+    X : pd.DataFrame
+        Input dataframe
+    y : pd.Series
+        Target variable (binary: 0/1 or False/True)
+    feature : str
+        Feature column name to calculate IV for
+        
+    Returns
+    -------
+    float
+        Information Value for the feature
+    """
+    # Convert inputs to numpy arrays
+    x_vals = np.asarray(X[feature]).astype(str)
+    y_vals = np.asarray(y).astype(int).flatten()
+
+    # Calculate total events and non-events
+    total_events = (y_vals == 1).sum()
+    total_non_events = (y_vals == 0).sum()
+
+    # Avoid division by zero
+    if total_events == 0 or total_non_events == 0:
+        return 0.0
+
+    # Use a small zero filler to keep consistency with calculate_woe
+    eps = 1e-9
+
+    # Reuse calculate_woe to get WOE values (uses same string-casting for categories)
+    woe_dict = calculate_woe(X, y, feature, zero_filler=eps)
+
+    iv = 0.0
+
+    # Calculate IV using the same category ordering
+    for category in np.unique(x_vals):
+        mask = x_vals == category
+        cat_events = (y_vals[mask] == 1).sum()
+        cat_non_events = (y_vals[mask] == 0).sum()
+
+        # Calculate distributions with the same epsilon used for WOE
+        event_dist = max(cat_events / total_events, eps)
+        non_event_dist = max(cat_non_events / total_non_events, eps)
+
+        woe = woe_dict.get(category, 0.0)
+
+        iv += (event_dist - non_event_dist) * woe
+
+    return float(iv)

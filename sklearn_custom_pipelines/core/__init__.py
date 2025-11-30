@@ -13,8 +13,8 @@ from sklearn_custom_pipelines.core.encoders import (
     RareCategoriesTransformer,
     BinningNumericalTransformer,
     BinningCategoriesTransformer,
+    PairedBinaryFeaturesTransformer,
     CustomMappingTransformer,
-    CustomRareCategoriesTransformer,
 )
 
 from sklearn_custom_pipelines.core.models import (
@@ -27,13 +27,13 @@ __all__ = [
     "FeatureEliminationTransformer",
     "DecorrelationTransformer",
     "PairedFeaturesTransformer",
+    "PairedBinaryFeaturesTransformer",
     "CustomPCATransformer",
     "WoeEncoderTransformer",
     "RareCategoriesTransformer",
     "BinningNumericalTransformer",
     "BinningCategoriesTransformer",
     "CustomMappingTransformer",
-    "CustomRareCategoriesTransformer",
     "CustomLogisticRegressionClassifier",
     "CustomCatBoostClassifier",
 ]

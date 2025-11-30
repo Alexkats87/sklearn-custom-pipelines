@@ -48,7 +48,6 @@ def create_synthetic_data(n_samples=5000, random_state=42):
         'os_version': np.random.choice(['Android 10', 'Android 11', 'iOS 14', None], n_samples),
         'telco_carrier': np.random.choice(['Carrier1', 'Carrier2', 'Carrier3', None], n_samples),
         'network_type': np.random.choice(['WiFi', '4G', '5G', None], n_samples),
-        # Binary flag features for PairedBinaryFeaturesTransformer (strings)
         'cat__flag__a': np.random.binomial(1, 0.15, n_samples).astype(str),
         'cat__flag__b': np.random.binomial(1, 0.25, n_samples).astype(str),
         'cat__flag__c': np.random.binomial(1, 0.10, n_samples).astype(str),
@@ -144,6 +143,9 @@ if __name__ == "__main__":
         ("model_tr", CustomLogisticRegressionClassifier()),
     ])
     
+    # Setup logger
+    logger = logging.getLogger(__name__)
+    
     # Fit pipeline
     model_ppl.fit(X_train, y_train)
     
@@ -159,7 +161,6 @@ if __name__ == "__main__":
         y_train_scores = y_train_pred
         y_test_scores = y_test_pred
     
-    print(f"\nROC_AUC train: {roc_auc_score(y_train, y_train_scores):.4f}")
-    print(f"ROC_AUC test:  {roc_auc_score(y_test, y_test_scores):.4f}")
-    
-    print(f"\nPipeline trained successfully!")
+    logger.info(f"ROC_AUC train: {roc_auc_score(y_train, y_train_scores):.4f}")
+    logger.info(f"ROC_AUC test:  {roc_auc_score(y_test, y_test_scores):.4f}")
+    logger.info(f"Pipeline trained successfully!")

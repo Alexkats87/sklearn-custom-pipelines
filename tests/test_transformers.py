@@ -623,6 +623,355 @@ class TestCustomMappingTransformer:
         transformer = CustomMappingTransformer()
         assert transformer.features_mappings_dct == {}
 
+
+class TestPowerNormTransformer:
+    """Test PowerNormTransformer class."""
+    
+    def test_transformer_initialization(self):
+        """Test that transformer can be initialized with default parameters."""
+        from sklearn_custom_pipelines import PowerNormTransformer
+        
+        transformer = PowerNormTransformer()
+        
+        assert transformer.num_features_pattern == r"^(num__)"
+        assert transformer.method == 'yeo-johnson'
+        assert transformer.num_features_lst is None
+        assert transformer.power_tranformer is None
+    
+    def test_transformer_initialization_custom_params(self):
+        """Test that transformer can be initialized with custom parameters."""
+        from sklearn_custom_pipelines import PowerNormTransformer
+        
+        custom_pattern = r"^(feature__)"
+        transformer = PowerNormTransformer(
+            num_features_pattern=custom_pattern,
+            method='box-cox'
+        )
+        
+        assert transformer.num_features_pattern == custom_pattern
+        assert transformer.method == 'box-cox'
+    
+    def test_transformer_fit(self, synthetic_dataset):
+        """Test that transformer can be fitted on numerical features."""
+        from sklearn_custom_pipelines import (
+            SimpleFeaturesTransformer,
+            PowerNormTransformer
+        )
+        
+        X, y = synthetic_dataset
+        
+        # Add numerical prefixes to features
+        num_features = {
+            'battery_level': 50.0,
+            'gps_location_lat': 0.0,
+            'gps_location_lon': 0.0
+        }
+        cat_features = {}
+        
+        simple_tf = SimpleFeaturesTransformer(num_features, cat_features)
+        X_simple = simple_tf.fit_transform(X, y)
+        
+        transformer = PowerNormTransformer()
+        transformer.fit(X_simple, y)
+        
+        # Check that numerical features were identified
+        assert transformer.num_features_lst is not None
+        assert len(transformer.num_features_lst) == 3
+        assert all(f in X_simple.columns for f in transformer.num_features_lst)
+        
+        # Check that power transformer was fitted
+        assert transformer.power_tranformer is not None
+    
+    def test_transformer_transform(self, synthetic_dataset):
+        """Test that transformer can transform numerical features."""
+        from sklearn_custom_pipelines import (
+            SimpleFeaturesTransformer,
+            PowerNormTransformer
+        )
+        
+        X, y = synthetic_dataset
+        
+        num_features = {
+            'battery_level': 50.0,
+            'gps_location_lat': 0.0,
+            'gps_location_lon': 0.0
+        }
+        cat_features = {}
+        
+        simple_tf = SimpleFeaturesTransformer(num_features, cat_features)
+        X_simple = simple_tf.fit_transform(X, y)
+        
+        transformer = PowerNormTransformer()
+        transformer.fit(X_simple, y)
+        
+        X_transformed = transformer.transform(X_simple)
+        
+        # Check that output has same number of rows
+        assert X_transformed.shape[0] == X_simple.shape[0]
+        
+        # Check that output has same columns
+        assert set(X_transformed.columns) == set(X_simple.columns)
+        
+        # Check that numerical features are still present
+        assert all(f in X_transformed.columns for f in transformer.num_features_lst)
+    
+    def test_transformer_fit_transform(self, synthetic_dataset):
+        """Test fit_transform method."""
+        from sklearn_custom_pipelines import (
+            SimpleFeaturesTransformer,
+            PowerNormTransformer
+        )
+        
+        X, y = synthetic_dataset
+        
+        num_features = {'battery_level': 50.0, 'gps_location_lat': 0.0}
+        cat_features = {}
+        
+        simple_tf = SimpleFeaturesTransformer(num_features, cat_features)
+        X_simple = simple_tf.fit_transform(X, y)
+        
+        transformer = PowerNormTransformer()
+        X_transformed = transformer.fit_transform(X_simple, y)
+        
+        assert X_transformed.shape[0] == X_simple.shape[0]
+        assert all(f in X_transformed.columns for f in transformer.num_features_lst)
+    
+    def test_transformer_with_y(self, synthetic_dataset):
+        """Test that transformer properly concatenates y when provided."""
+        from sklearn_custom_pipelines import (
+            SimpleFeaturesTransformer,
+            PowerNormTransformer
+        )
+        
+        X, y = synthetic_dataset
+        
+        num_features = {'battery_level': 50.0}
+        cat_features = {}
+        
+        simple_tf = SimpleFeaturesTransformer(num_features, cat_features)
+        X_simple = simple_tf.fit_transform(X, y)
+        
+        transformer = PowerNormTransformer()
+        transformer.fit(X_simple, y)
+        
+        X_transformed = transformer.transform(X_simple, y)
+        
+        # Check that y is concatenated
+        assert 'y' in X_transformed.columns
+        assert X_transformed.shape[0] == X_simple.shape[0]
+        assert X_transformed['y'].equals(y)
+    
+    def test_transformer_without_y(self, synthetic_dataset):
+        """Test that transformer returns only X when y is None."""
+        from sklearn_custom_pipelines import (
+            SimpleFeaturesTransformer,
+            PowerNormTransformer
+        )
+        
+        X, y = synthetic_dataset
+        
+        num_features = {'battery_level': 50.0}
+        cat_features = {}
+        
+        simple_tf = SimpleFeaturesTransformer(num_features, cat_features)
+        X_simple = simple_tf.fit_transform(X, y)
+        
+        transformer = PowerNormTransformer()
+        transformer.fit(X_simple, y)
+        
+        X_transformed = transformer.transform(X_simple, y=None)
+        
+        # Check that y is not in output
+        assert 'y' not in X_transformed.columns
+    
+    def test_transformer_feature_pattern_matching(self, synthetic_dataset):
+        """Test that transformer correctly identifies features using pattern."""
+        from sklearn_custom_pipelines import PowerNormTransformer
+        
+        X, y = synthetic_dataset
+        
+        # Create dataframe with mixed feature names
+        X_mixed = pd.DataFrame({
+            'num__feature1': np.random.randn(100),
+            'num__feature2': np.random.randn(100),
+            'other__feature': np.random.randn(100),
+            'feature__num': np.random.randn(100)  # doesn't match pattern
+        })
+        
+        transformer = PowerNormTransformer(num_features_pattern=r"^(num__)")
+        transformer.fit(X_mixed)
+        
+        # Should only match num__feature1 and num__feature2
+        assert len(transformer.num_features_lst) == 2
+        assert 'num__feature1' in transformer.num_features_lst
+        assert 'num__feature2' in transformer.num_features_lst
+        assert 'other__feature' not in transformer.num_features_lst
+        assert 'feature__num' not in transformer.num_features_lst
+    
+    def test_transformer_custom_pattern(self, synthetic_dataset):
+        """Test transformer with custom feature pattern."""
+        from sklearn_custom_pipelines import PowerNormTransformer
+        
+        X_custom = pd.DataFrame({
+            'feature__a': np.random.randn(100),
+            'feature__b': np.random.randn(100),
+            'other__c': np.random.randn(100)
+        })
+        
+        transformer = PowerNormTransformer(num_features_pattern=r"^(feature__)")
+        transformer.fit(X_custom)
+        
+        assert len(transformer.num_features_lst) == 2
+        assert 'feature__a' in transformer.num_features_lst
+        assert 'feature__b' in transformer.num_features_lst
+        assert 'other__c' not in transformer.num_features_lst
+    
+    def test_transformer_yeo_johnson_method(self, synthetic_dataset):
+        """Test transformer with yeo-johnson method."""
+        from sklearn_custom_pipelines import PowerNormTransformer
+        
+        # Yeo-Johnson works with any real values including negative
+        X = pd.DataFrame({
+            'num__feature1': np.random.randn(100),  # includes negative values
+            'num__feature2': np.linspace(-10, 10, 100)
+        })
+        
+        transformer = PowerNormTransformer(method='yeo-johnson')
+        transformer.fit(X)
+        X_transformed = transformer.transform(X)
+        
+        # Should not raise error
+        assert X_transformed.shape == X.shape
+        assert not X_transformed.isna().any().any()
+    
+    def test_transformer_box_cox_method(self):
+        """Test transformer with box-cox method (requires positive values)."""
+        from sklearn_custom_pipelines import PowerNormTransformer
+        
+        # Box-Cox requires all positive values
+        X = pd.DataFrame({
+            'num__feature1': np.random.exponential(2, 100),  # all positive
+            'num__feature2': np.random.exponential(3, 100)
+        })
+        
+        transformer = PowerNormTransformer(method='box-cox')
+        transformer.fit(X)
+        X_transformed = transformer.transform(X)
+        
+        assert X_transformed.shape == X.shape
+        assert not X_transformed.isna().any().any()
+    
+    def test_transformer_preserves_non_matching_columns(self, synthetic_dataset):
+        """Test that transformer preserves columns that don't match pattern."""
+        from sklearn_custom_pipelines import PowerNormTransformer
+        
+        X = pd.DataFrame({
+            'num__feature1': np.random.randn(100),
+            'num__feature2': np.random.randn(100),
+            'cat__feature': np.random.choice(['A', 'B', 'C'], 100),
+            'other_feature': np.arange(100)
+        })
+        
+        transformer = PowerNormTransformer()
+        transformer.fit(X)
+        X_transformed = transformer.transform(X)
+        
+        # Non-matching columns should be preserved
+        assert 'cat__feature' in X_transformed.columns
+        assert 'other_feature' in X_transformed.columns
+        assert np.array_equal(X_transformed['cat__feature'].values, X['cat__feature'].values)
+        assert np.array_equal(X_transformed['other_feature'].values, X['other_feature'].values)
+    
+    def test_transformer_pipeline_compatibility(self, synthetic_dataset):
+        """Test that transformer works with sklearn Pipeline."""
+        from sklearn.pipeline import Pipeline
+        from sklearn_custom_pipelines import (
+            SimpleFeaturesTransformer,
+            PowerNormTransformer
+        )
+        
+        X, y = synthetic_dataset
+        
+        num_features = {'battery_level': 50.0, 'gps_location_lat': 0.0}
+        cat_features = {}
+        
+        pipeline = Pipeline([
+            ('simple_features', SimpleFeaturesTransformer(num_features, cat_features)),
+            ('power_norm', PowerNormTransformer())
+        ])
+        
+        X_transformed = pipeline.fit_transform(X, y)
+        
+        assert X_transformed.shape[0] == X.shape[0]
+        # Pipeline should add the prefixes and transform
+        assert 'num__battery_level' in X_transformed.columns
+    
+    def test_transformer_handles_missing_numerical_features(self):
+        """Test transformer behavior when no numerical features match pattern."""
+        from sklearn_custom_pipelines import PowerNormTransformer
+        
+        X = pd.DataFrame({
+            'cat__feature1': np.random.choice(['A', 'B'], 100),
+            'other__feature2': np.random.choice(['X', 'Y'], 100)
+        })
+        
+        transformer = PowerNormTransformer()
+        transformer.fit(X)
+        
+        # num_features_lst will be empty since no features match pattern
+        assert len(transformer.num_features_lst) == 0
+        
+        # power_tranformer should be None when no numerical features found
+        assert transformer.power_tranformer is None
+        
+        # Transform should still work and return data unchanged
+        X_transformed = transformer.transform(X)
+        assert X_transformed.shape == X.shape
+        assert X_transformed.equals(X)
+    
+    def test_transformer_handles_sparse_and_dense(self, synthetic_dataset):
+        """Test transformer with different data distributions."""
+        from sklearn_custom_pipelines import PowerNormTransformer
+        
+        # Test with sparse data (many zeros)
+        X_sparse = pd.DataFrame({
+            'num__sparse1': np.random.choice([0, 1, 2], size=100, p=[0.7, 0.2, 0.1]),
+            'num__sparse2': np.random.choice([0, 1], size=100, p=[0.8, 0.2])
+        })
+        
+        transformer = PowerNormTransformer(method='yeo-johnson')
+        transformer.fit(X_sparse)
+        X_transformed = transformer.transform(X_sparse)
+        
+        assert X_transformed.shape == X_sparse.shape
+        assert not X_transformed.isna().any().any()
+    
+    def test_transformer_returns_copy_not_reference(self, synthetic_dataset):
+        """Test that transformer returns a copy, not a reference."""
+        from sklearn_custom_pipelines import (
+            SimpleFeaturesTransformer,
+            PowerNormTransformer
+        )
+        
+        X, y = synthetic_dataset
+        
+        num_features = {'battery_level': 50.0}
+        cat_features = {}
+        
+        simple_tf = SimpleFeaturesTransformer(num_features, cat_features)
+        X_simple = simple_tf.fit_transform(X, y)
+        
+        transformer = PowerNormTransformer()
+        transformer.fit(X_simple, y)
+        
+        X_original = X_simple.copy()
+        X_transformed = transformer.transform(X_simple)
+        
+        # Modifying transformed should not affect original
+        X_transformed.iloc[0, 0] = 999
+        assert X_simple.iloc[0, 0] != 999
+
+
 if __name__ == '__main__':
     pytest.main([__file__, '-v'])
 

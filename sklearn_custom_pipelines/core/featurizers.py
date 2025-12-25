@@ -9,7 +9,7 @@ from itertools import combinations
 from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.decomposition import PCA
 from sklearn.preprocessing import StandardScaler
-from feature_engine.selection import (
+from feature_engine.selection import (  # To get rid of,  replace with own implementation
     DropDuplicateFeatures,
     DropConstantFeatures,
     DropCorrelatedFeatures,

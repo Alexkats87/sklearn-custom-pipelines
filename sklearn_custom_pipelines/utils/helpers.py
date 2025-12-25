@@ -2,7 +2,7 @@
 
 import pandas as pd
 import numpy as np
-from optbinning import OptimalBinning
+from optbinning import OptimalBinning # To get rid of
 
 from sklearn_custom_pipelines.utils.const import (
     MISSING, TARGET, NAN
